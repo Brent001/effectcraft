@@ -1,0 +1,35 @@
+name: Windows GPU backend recovery
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "apps/effectcraft/src/main.rs"
+      - "apps/effectcraft/src/launch_guard.rs"
+      - "crates/engine/src/prefs.rs"
+      - ".github/workflows/windows-gpu-backend.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-gpu-backend-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend-recovery:
+    name: Compile and test graphics backend recovery
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+      - name: Check Rust formatting
+        run: cargo fmt --all -- --check
+      - name: Compile the desktop application
+        run: cargo check --locked -p effectcraft
+      - name: Test backend selection and crash recovery
+        run: cargo test --locked -p effectcraft --bin effectcraft launch_guard::tests
