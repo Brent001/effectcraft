@@ -346,6 +346,8 @@ struct Upload {
 #[derive(Default)]
 struct Uploads {
     map: HashMap<usize, Upload>,
+    /// LRU index for the upload map. This avoids rescanning all cached textures during eviction.
+    order: BTreeSet<(u64, usize)>,
     bytes: usize,
     clock: u64,
 }
@@ -1018,17 +1020,27 @@ impl GpuContext {
             if let Some(e) = u.map.get_mut(&key)
                 && e.buf.upgrade().is_some_and(|b| Arc::ptr_eq(&b, buf))
             {
+                let previous = e.last_use;
                 e.last_use = now;
-                return Some(e.img.clone());
+                let image = e.img.clone();
+                u.order.remove(&(previous, key));
+                u.order.insert((now, key));
+                return Some(image);
             }
         }
         let img = self.upload_image(&buf.img)?;
         if let Ok(mut u) = self.uploads.lock() {
             let bytes = buf.img.data.len() * 16;
+            // Another render worker may have advanced the clock while this upload was in flight.
+            // Give the newly inserted entry a unique, newest LRU stamp.
+            u.clock += 1;
             let now = u.clock;
-            if let Some(old) = u.map.insert(key, Upload { buf: Arc::downgrade(buf), img: img.clone(), bytes, last_use: now }) {
+            if let Some(old) = u.map.remove(&key) {
+                u.order.remove(&(old.last_use, key));
                 u.bytes -= old.bytes;
             }
+            u.map.insert(key, Upload { buf: Arc::downgrade(buf), img: img.clone(), bytes, last_use: now });
+            u.order.insert((now, key));
             u.bytes += bytes;
             // Drop textures of freed buffers at once (a layer whose buffer changes every frame
             // makes a new one each time, and nothing can hit the old one again), then the least
@@ -1037,6 +1049,7 @@ impl GpuContext {
             let dead: Vec<usize> = u.map.iter().filter(|(_, e)| e.buf.strong_count() == 0).map(|(k, _)| *k).collect();
             for k in dead {
                 if let Some(e) = u.map.remove(&k) {
+                    u.order.remove(&(e.last_use, k));
                     u.bytes -= e.bytes;
                 }
             }
@@ -1048,8 +1061,9 @@ impl GpuContext {
                 );
             }
             while u.bytes > budget {
-                let Some(k) = u.map.iter().min_by_key(|(_, e)| e.last_use).map(|(k, _)| *k) else { break };
+                let Some((stamp, k)) = u.order.pop_first() else { break };
                 if let Some(e) = u.map.remove(&k) {
+                    debug_assert_eq!(e.last_use, stamp, "LRU index must match each cached upload");
                     u.bytes -= e.bytes;
                 }
             }
@@ -1061,6 +1075,7 @@ impl GpuContext {
     pub fn clear_uploads(&self) {
         if let Ok(mut u) = self.uploads.lock() {
             u.map.clear();
+            u.order.clear();
             u.bytes = 0;
         }
         if let Ok(mut p) = self.pool.lock() {
