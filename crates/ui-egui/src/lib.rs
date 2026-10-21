@@ -663,17 +663,27 @@ impl EffectcraftApp {
         }
     }
 
-    /// Keep GPU-composited viewer frames on the GPU (drawn from their texture). The browser can't
-    /// read frames back (its thread can't wait for the GPU), so there the viewer shows GPU frames
-    /// directly whenever it draws them plainly (RGB, no exposure, no region of interest); the
-    /// desktop reads them back (see [`frames::RenderSource::gpu_display`]).
+fn gpu_display_eligible(
+    channel: effectcraft_engine::viewer::Channel,
+    exposure_zero: bool,
+    has_roi: bool,
+    extended_view: bool,
+) -> bool {
+    channel == effectcraft_engine::viewer::Channel::Rgb && exposure_zero && !has_roi && !extended_view
+}
+
+    /// Whether the viewer can draw the final RGB frame directly from its GPU texture without
+    /// CPU pixel processing. On desktop, keep the existing CPU path when persistent disk caching
+    /// needs a CPU frame to save; the browser's existing GPU-display behavior is unchanged.
     fn gpu_display(&self) -> bool {
         let v = &self.session.state.viewer;
-        cfg!(target_arch = "wasm32")
-            && v.channel == effectcraft_engine::viewer::Channel::Rgb
-            && v.exposure == 0.0
-            && self.session.state.region_of_interest.is_none()
-            && self.ui.viewer.extended.is_none()
+        let plain_rgb = gpu_display_eligible(
+            v.channel,
+            v.exposure == 0.0,
+            self.session.state.region_of_interest.is_some(),
+            self.ui.viewer.extended.is_some(),
+        );
+        plain_rgb && (cfg!(target_arch = "wasm32") || self.session.disk_cache.is_none())
     }
 
     /// The UI draws its panels and handles input such as dropped files. Until the fonts are
@@ -2283,3 +2293,25 @@ mod appearance_tests {
         assert_eq!(app.ui.theme, ThemeKind::Darker);
     }
 }
+
+#[cfg(test)]
+mod gpu_display_eligibility_tests {
+    use super::gpu_display_eligible;
+    use effectcraft_engine::viewer::Channel;
+
+    #[test]
+    fn plain_rgb_viewer_can_use_the_native_gpu_texture() {
+        assert!(gpu_display_eligible(Channel::Rgb, true, false, false));
+    }
+
+    #[test]
+    fn views_that_need_cpu_pixel_processing_keep_the_cpu_readback_path() {
+        for channel in [Channel::Red, Channel::Green, Channel::Blue, Channel::Alpha, Channel::RgbStraight] {
+            assert!(!gpu_display_eligible(channel, true, false, false));
+        }
+        assert!(!gpu_display_eligible(Channel::Rgb, false, false, false), "exposure needs CPU pixels");
+        assert!(!gpu_display_eligible(Channel::Rgb, true, true, false), "ROI display needs CPU pixels");
+        assert!(!gpu_display_eligible(Channel::Rgb, true, false, true), "extended view needs CPU pixels");
+    }
+}
+

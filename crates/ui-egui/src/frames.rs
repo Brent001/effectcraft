@@ -244,11 +244,10 @@ pub struct RenderSource {
     pub layer_cache: Arc<LayerCache>,
     /// GPU compositor on the viewer's device (Mercury GPU Acceleration), if available.
     pub gpu: Option<Gpu>,
-    /// Keep GPU frames on the GPU for the viewer (native egui-wgpu textures). Off on the
-    /// desktop: Show Channel / exposure / region-of-interest drawing read the CPU frame texture,
-    /// so GPU frames are read back (the compositing still runs on the GPU). On in the browser
-    /// while the viewer draws plainly, because there frames can't be read back synchronously
-    /// (`EffectcraftApp::gpu_display`).
+    /// Keep a frame as a native egui-wgpu texture when the viewer can display it without
+    /// CPU pixel processing (ordinary RGB, zero exposure, no ROI/extended view). Desktop also
+    /// keeps the readback path while persistent disk caching needs CPU frame pixels. The browser
+    /// may display plain GPU frames directly because it can't wait for synchronous readback.
     pub gpu_display: bool,
     /// The persistent disk cache, when enabled.
     pub disk: Option<Arc<DiskCache>>,
