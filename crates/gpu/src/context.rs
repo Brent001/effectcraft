@@ -85,6 +85,37 @@ const POOL_BUDGET: usize = 768 << 20;
 /// Readback staging buffers kept for reuse across sizes (bytes).
 const STAGING_BUDGET: u64 = 256 << 20;
 
+/// Per-adapter working-memory budgets. Integrated GPUs share system RAM with the CPU,
+/// so large video-memory caches can compete directly with the editor and OS for the same 8 GB.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct MemoryBudgets {
+    upload: usize,
+    pool: usize,
+    staging: u64,
+}
+
+fn memory_budgets(device_type: wgpu::DeviceType) -> MemoryBudgets {
+    match device_type {
+        wgpu::DeviceType::IntegratedGpu => MemoryBudgets {
+            upload: 512 << 20,
+            pool: 256 << 20,
+            staging: 64 << 20,
+        },
+        wgpu::DeviceType::Cpu => MemoryBudgets {
+            upload: 128 << 20,
+            pool: 64 << 20,
+            staging: 32 << 20,
+        },
+        _ => MemoryBudgets {
+            upload: UPLOAD_BUDGET,
+            pool: POOL_BUDGET,
+            staging: STAGING_BUDGET,
+        },
+    }
+}
+
+
+
 /// A GPU image: premultiplied RGBA f32 in a texture (cheap to clone; immutable once written).
 /// Working images come from the context's texture pool and go back to it when the last clone
 /// is dropped.
@@ -137,7 +168,6 @@ impl Drop for Lease {
 /// submitted yet. Reusing it in another encoder that is submitted first would overwrite it
 /// before those reads run, so a released texture waits until every encoder that was open when
 /// it was released has been submitted (or dropped).
-#[derive(Default)]
 pub(crate) struct Pool {
     free: HashMap<(u32, u32), Vec<wgpu::Texture>>,
     /// (texture, newest encoder open at its release).
@@ -146,6 +176,8 @@ pub(crate) struct Pool {
     open: BTreeSet<u64>,
     next: u64,
     bytes: usize,
+    /// Per-adapter free-texture budget, lower for integrated GPUs that share system RAM.
+    budget: usize,
     /// Working textures reused / newly allocated (diagnostics, tests).
     hits: u64,
     misses: u64,
@@ -158,7 +190,45 @@ pub(crate) struct Pool {
     next_owner: u64,
 }
 
+impl Default for Pool {
+    fn default() -> Self {
+        Self {
+            free: HashMap::new(),
+            released: Vec::new(),
+            open: BTreeSet::new(),
+            next: 0,
+            bytes: 0,
+            budget: POOL_BUDGET,
+            hits: 0,
+            misses: 0,
+            owned: HashMap::new(),
+            next_owner: 0,
+        }
+    }
+}
+
 /// In-`Enc` texture reuse ([`Pool::owned`]); tests turn it off to compare.
+#[cfg(test)]
+mod memory_budget_tests {
+    use super::{MemoryBudgets, memory_budgets};
+
+    #[test]
+    fn integrated_gpu_budget_respects_shared_system_memory() {
+        assert_eq!(
+            memory_budgets(wgpu::DeviceType::IntegratedGpu),
+            MemoryBudgets { upload: 512 << 20, pool: 256 << 20, staging: 64 << 20 }
+        );
+    }
+
+    #[test]
+    fn software_gpu_uses_the_smallest_cache_budget() {
+        assert_eq!(
+            memory_budgets(wgpu::DeviceType::Cpu),
+            MemoryBudgets { upload: 128 << 20, pool: 64 << 20, staging: 32 << 20 }
+        );
+    }
+}
+
 pub(crate) static TEXTURE_REUSE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
 
 /// Counts of uploads (CPU → GPU) and readbacks (GPU → CPU).
@@ -270,7 +340,7 @@ impl Pool {
 
     fn make_free(&mut self, t: wgpu::Texture) {
         let b = tex_bytes(&t);
-        if self.bytes + b > POOL_BUDGET {
+        if self.bytes.saturating_add(b) > self.budget {
             return;
         }
         self.bytes += b;
@@ -416,6 +486,8 @@ pub struct GpuContext {
     dummy_buf: wgpu::Buffer,
     uploads: Mutex<Uploads>,
     upload_budget: std::sync::atomic::AtomicUsize,
+    /// Readback staging-buffer cap selected for the adapter's memory class.
+    staging_budget: u64,
     upload_full_warned: std::sync::atomic::AtomicBool,
     pool: Arc<Mutex<Pool>>,
     /// CPU ↔ GPU traffic (diagnostics: `bench --gpu`).
@@ -546,6 +618,7 @@ impl GpuContext {
     /// [`Self::device_failure_notifier`] for immediate readback cancellation.
     pub fn new(adapter: &wgpu::Adapter, device: wgpu::Device, queue: wgpu::Queue) -> Result<GpuContext, String> {
         let info = adapter.get_info();
+        let budgets = memory_budgets(info.device_type);
         if !adapter.get_downlevel_capabilities().flags.contains(wgpu::DownlevelFlags::COMPUTE_SHADERS) {
             return Err(format!("{} ({:?}): no compute shaders", info.name, info.backend));
         }
@@ -712,6 +785,8 @@ impl GpuContext {
             init_resource(&device, "dummy storage buffer", || buffer_init(&device, &queue, Some("dummy"), &[0u8; 16], wgpu::BufferUsages::STORAGE))?;
         let dummy_tex = init_resource(&device, "dummy texture view", || dummy.create_view(&Default::default()))?;
         let max_dim = device.limits().max_texture_dimension_2d;
+        let mut pool = Pool::default();
+        pool.budget = budgets.pool;
         Ok(GpuContext {
             device,
             queue,
@@ -731,9 +806,10 @@ impl GpuContext {
             dummy,
             dummy_buf,
             uploads: Mutex::new(Uploads::default()),
-            upload_budget: std::sync::atomic::AtomicUsize::new(UPLOAD_BUDGET),
+            upload_budget: std::sync::atomic::AtomicUsize::new(budgets.upload),
+            staging_budget: budgets.staging,
             upload_full_warned: Default::default(),
-            pool: Default::default(),
+            pool: Arc::new(Mutex::new(pool)),
             staging: Default::default(),
             transfers: Default::default(),
             zeros: Default::default(),
@@ -1024,7 +1100,7 @@ impl GpuContext {
         (GpuImage { texture, width: w, height: h, _lease: Some(lease), levels: None }, was_reused)
     }
 
-    /// Bytes of uploaded layer textures the context keeps (default 1536 MB). An application that
+    /// Bytes of uploaded layer textures the context keeps (1536 MB discrete, 512 MB integrated). An application that
     /// knows the device's memory can raise it (static layers of a big frame upload once) or lower
     /// it (a small GPU); the least recently used textures go first.
     pub fn set_upload_budget(&self, bytes: usize) {
@@ -1403,11 +1479,11 @@ impl<'g> Enc<'g> {
         // other sizes once over budget, or mapped host memory grows for the whole render (#2081).
         if let Ok(mut s) = self.g.staging.lock() {
             let held: u64 = s.iter().map(|(k, v)| k.saturating_mul(v.len() as u64)).sum();
-            if held.saturating_add(size) > STAGING_BUDGET {
+            if held.saturating_add(size) > self.g.staging_budget {
                 s.retain(|k, _| *k == size);
             }
             let v = s.entry(size).or_default();
-            if v.len() < 2 && size <= STAGING_BUDGET {
+            if v.len() < 2 && size <= self.g.staging_budget {
                 v.push(buf);
             }
         }

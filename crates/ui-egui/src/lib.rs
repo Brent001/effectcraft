@@ -690,7 +690,7 @@ fn viewer_backend(gpu_acceleration_enabled: bool) -> effectcraft_engine::render:
     /// needs a CPU frame to save; the browser's existing GPU-display behavior is unchanged.
     fn gpu_display(&self) -> bool {
         let v = &self.session.state.viewer;
-        let plain_rgb = gpu_display_eligible(
+        let plain_rgb = Self::gpu_display_eligible(
             v.channel,
             v.exposure == 0.0,
             self.session.state.region_of_interest.is_some(),
@@ -1086,7 +1086,7 @@ fn viewer_backend(gpu_acceleration_enabled: bool) -> effectcraft_engine::render:
             draft: self.ui.viewer.fast_preview || draft,
             view: self.session.view_camera(comp),
             roi,
-            backend: viewer_backend(self.session.project.settings.gpu_acceleration),
+            backend: Self::viewer_backend(self.session.project.settings.gpu_acceleration),
             nested_switches: self.session.prefs.general.switches_affect_nested_comps,
             draft_shadows: self.session.prefs.three_d.realtime_shadows,
             proxy: Default::default(),
@@ -2310,13 +2310,13 @@ mod appearance_tests {
 
 #[cfg(test)]
 mod gpu_display_eligibility_tests {
-    use super::{EffectcraftApp, gpu_display_eligible, viewer_backend};
+    use super::EffectcraftApp;
     use effectcraft_engine::render::Backend;
     use effectcraft_engine::viewer::Channel;
 
     #[test]
     fn plain_rgb_viewer_can_use_the_native_gpu_texture() {
-        assert!(gpu_display_eligible(Channel::Rgb, true, false, false, false));
+        assert!(EffectcraftApp::gpu_display_eligible(Channel::Rgb, true, false, false, false));
     }
 
     #[test]
@@ -2324,20 +2324,19 @@ mod gpu_display_eligibility_tests {
         for channel in [Channel::Red, Channel::Green, Channel::Blue, Channel::Alpha, Channel::RgbStraight] {
             assert!(!gpu_display_eligible(channel, true, false, false, false));
         }
-        assert!(!gpu_display_eligible(Channel::Rgb, false, false, false, false), "exposure needs CPU pixels");
-        assert!(!gpu_display_eligible(Channel::Rgb, true, true, false, false), "ROI display needs CPU pixels");
-        assert!(!gpu_display_eligible(Channel::Rgb, true, false, true, false), "extended view needs CPU pixels");
+        assert!(!EffectcraftApp::gpu_display_eligible(Channel::Rgb, false, false, false, false), "exposure needs CPU pixels");
+        assert!(!EffectcraftApp::gpu_display_eligible(Channel::Rgb, true, true, false, false), "ROI display needs CPU pixels");
+        assert!(!EffectcraftApp::gpu_display_eligible(Channel::Rgb, true, false, true, false), "extended view needs CPU pixels");
         assert!(
-            !gpu_display_eligible(Channel::Rgb, true, false, false, true),
+            !EffectcraftApp::gpu_display_eligible(Channel::Rgb, true, false, false, true),
             "display color-management conversion must keep the CPU pixel path"
         );
     }
 
     #[test]
     fn viewer_prefers_gpu_only_when_project_gpu_acceleration_is_enabled() {
-        assert_eq!(viewer_backend(true), Backend::Gpu);
-        assert_eq!(viewer_backend(false), Backend::Cpu);
-        let _ = std::any::type_name::<EffectcraftApp>();
+        assert_eq!(EffectcraftApp::viewer_backend(true), Backend::Gpu);
+        assert_eq!(EffectcraftApp::viewer_backend(false), Backend::Cpu);
     }
 }
 
