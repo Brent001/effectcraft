@@ -856,6 +856,35 @@ fn effects_whose_kernels_failed_render_on_the_cpu() {
     }
 }
 
+/// Kernel implementations with a known or unverified difference from the CPU reference must
+/// remain on the CPU until their output passes the pixel-parity suite.
+#[test]
+fn effects_without_parity_stay_on_cpu_until_proven() {
+    const CPU_ONLY: &[&str] = &[
+        "ec.stylize.glow",
+        "ec.color.levels",
+        "ec.color.curves",
+        "ec.color.tint",
+        "ec.generate.fill",
+        "ec.color.brightnesscontrast",
+        "ec.color.exposure",
+        "ec.distort.transform",
+        "ec.distort.wavewarp",
+        "ec.transition.venetian",
+        "ec.transition.radialwipe",
+        "ec.generate.fourcolor",
+        "ec.color.blackwhite",
+        "ec.color.tritone",
+        "ec.key.luma",
+        "ec.key.extract",
+        "ec.color.levelsic",
+        "ec.time.timewarp",
+    ];
+    for id in CPU_ONLY {
+        assert!(!crate::effects::supports(id), "{id} must stay CPU-routed until parity is proven");
+    }
+}
+
 /// Effect kernels build on first use rather than delaying application start. This asks the
 /// device to compile every currently registered effect kernel so unused families still get tested.
 #[test]
