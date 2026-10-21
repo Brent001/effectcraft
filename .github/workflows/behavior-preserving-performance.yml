@@ -5,16 +5,7 @@ on:
     branches: [main]
     paths:
       - "crates/gpu/**"
-      - "crates/ui-egui/**"
-      - "crates/render/**"
-      - "crates/media/**"
-      - ".github/workflows/behavior-preserving-performance.yml"
-      - "Cargo.toml"
-      - "Cargo.lock"
-  push:
-    branches: ["perf/render-gpu-parity"]
-    paths:
-      - "crates/gpu/**"
+      - "crates/effects/**"
       - "crates/ui-egui/**"
       - "crates/render/**"
       - "crates/media/**"
