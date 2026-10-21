@@ -172,7 +172,8 @@ fn main() -> eframe::Result {
     appimage::integrate_from_env(ICON_PNG);
     // Settings ▸ Startup & Repair ▸ Window Graphics, switched to OpenGL when the last launch
     // stopped as its window opened (a crashing graphics driver, #243).
-    let mut launch = launch_guard::Launch::begin(effectcraft_host::config_dir().as_deref(), std::env::var_os("WGPU_BACKEND").is_some());
+    let backend_override = std::env::var_os("WGPU_BACKEND").is_some();
+    let mut launch = launch_guard::Launch::begin(effectcraft_host::config_dir().as_deref(), backend_override);
     let selected_backend = launch.backends;
     let notice = launch.notice.take();
     let options = eframe::NativeOptions {
@@ -346,14 +347,20 @@ fn main() -> eframe::Result {
     match &result {
         Ok(()) => log::info!("the window closed"),
         Err(e) => {
-            launch_guard::backend_failed(effectcraft_host::config_dir().as_deref(), selected_backend);
-            let next_graphics = match selected_backend {
-                Some(eframe::wgpu::Backends::DX12) => Some("Vulkan"),
-                Some(eframe::wgpu::Backends::VULKAN) => Some("OpenGL compatibility"),
-                Some(eframe::wgpu::Backends::GL) => Some("Automatic"),
-                _ if cfg!(target_os = "windows") => Some("Vulkan"),
-                _ if cfg!(target_os = "linux") => Some("OpenGL compatibility"),
-                _ => None,
+            if !backend_override {
+                launch_guard::backend_failed(effectcraft_host::config_dir().as_deref(), selected_backend);
+            }
+            let next_graphics = if backend_override {
+                None
+            } else {
+                match selected_backend {
+                    Some(eframe::wgpu::Backends::DX12) => Some("Vulkan"),
+                    Some(eframe::wgpu::Backends::VULKAN) => Some("OpenGL compatibility"),
+                    Some(eframe::wgpu::Backends::GL) => Some("Automatic"),
+                    _ if cfg!(target_os = "windows") => Some("Vulkan"),
+                    _ if cfg!(target_os = "linux") => Some("OpenGL compatibility"),
+                    _ => None,
+                }
             };
             startup_failed(e, next_graphics);
         }
