@@ -215,10 +215,10 @@ jobs:
               arch.append({"arch": "aarch64"})
 
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
-              output.write(f"windows_matrix={json.dumps(windows, separators=(',', ':'))}\\n")
-              output.write(f"linux_matrix={json.dumps(linux, separators=(',', ':'))}\\n")
-              output.write(f"flatpak_matrix={json.dumps(flatpak, separators=(',', ':'))}\\n")
-              output.write(f"arch_matrix={json.dumps(arch, separators=(',', ':'))}\\n")
+              output.write(f"windows_matrix={json.dumps(windows, separators=(',', ':'))}\n")
+              output.write(f"linux_matrix={json.dumps(linux, separators=(',', ':'))}\n")
+              output.write(f"flatpak_matrix={json.dumps(flatpak, separators=(',', ':'))}\n")
+              output.write(f"arch_matrix={json.dumps(arch, separators=(',', ':'))}\n")
           PY
   version:
     timeout-minutes: 10
