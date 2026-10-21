@@ -1,16 +1,10 @@
-//! Settings ▸ Startup & Repair ▸ Window Graphics, and the launch guard behind it.
+//! Settings > Startup & Repair > Window Graphics and crash recovery.
 //!
-//! Some graphics drivers crash EffectCraft as its window's device is created (an access
-//! violation in an older Intel UHD driver with DirectX 12 / Vulkan, #243), or a moment after
-//! its first frame, as the window is shown and its surface re-created (AMD's Vulkan driver for
-//! a Radeon RX 6800M, Adrenalin 26.9.2: an access violation in amdvlk64.dll on every launch).
-//! A crash in a driver can't be caught, so each launch leaves a marker in the settings folder
-//! until its window has kept drawing for [`SETTLE`] (or the app quits normally before then). A
-//! launch that finds the previous one's marker switches Window Graphics to OpenGL, which those
-//! drivers run, and says so once the window is up. `WGPU_BACKEND` (wgpu's own override) still
-//! wins over both. The marker is locked while its launch runs, so a second copy opened meanwhile
-//! isn't taken for a crash; and a window OpenGL can't open either puts Window Graphics back to
-//! Automatic ([`opengl_failed`]) rather than failing every launch.
+//! Some graphics drivers can crash while a window's device is created or its surface is
+//! recreated. Each launch leaves a marker until its window has drawn for SETTLE or the app
+//! exits normally. A stale marker selects a safer backend for the next launch. OpenGL can draw
+//! the window, but the EffectCraft compute compositor deliberately rejects GL and uses CPU
+//! compositing instead.
 
 use std::fs::File;
 use std::path::{Path, PathBuf};
@@ -19,17 +13,12 @@ use std::time::{Duration, Instant};
 use effectcraft_engine::prefs::{PREFS_FILE, Prefs};
 use eframe::wgpu::Backends;
 
-/// Left in the settings folder from a launch until its window has settled.
 const MARKER: &str = "launch-pending";
 
-/// How long the window keeps drawing after its first frame before the launch counts as made.
-/// A driver that fails as the window is shown and its surface re-created does so within the
-/// first second; a user quitting sooner than this is told the next launch uses OpenGL and can
-/// switch back in Settings.
+/// Time the window must keep drawing before the launch is considered stable.
 pub const SETTLE: Duration = Duration::from_secs(3);
 
-/// Resolve a saved Window Graphics choice. OpenGL may draw the UI, but the compute compositor
-/// rejects it; Windows users need a working DX12 or Vulkan path for accelerated effects.
+/// Resolve the saved Window Graphics value to the actual wgpu backend mask.
 fn backends_for_choice(choice: &str) -> Option<Backends> {
     match choice {
         "dx12" if cfg!(target_os = "windows") => Some(Backends::DX12),
@@ -39,9 +28,7 @@ fn backends_for_choice(choice: &str) -> Option<Backends> {
     }
 }
 
-/// On an unsuccessful launch, try another backend on the next start. Automatic/DX12 tries Vulkan
-/// on Windows first; Vulkan then tries OpenGL compatibility; OpenGL returns to Automatic to avoid
-/// a retry loop. Linux has no DX12 backend.
+/// Choose the next backend after a crash during window startup.
 fn crash_fallback(choice: &str) -> Option<(&'static str, &'static str)> {
     match choice {
         "auto" if cfg!(target_os = "windows") => Some(("vulkan", "Vulkan")),
@@ -53,60 +40,57 @@ fn crash_fallback(choice: &str) -> Option<(&'static str, &'static str)> {
     }
 }
 
-/// This launch's window graphics.
 #[derive(Debug, Default)]
 pub struct Launch {
-    /// The graphics APIs the window may use (`None`: eframe's default).
+    /// None lets eframe use its default backend selection.
     pub backends: Option<Backends>,
-    /// Switched to OpenGL because the previous launch stopped as its window opened: the message
-    /// to show.
     pub notice: Option<String>,
     marker: Option<PathBuf>,
-    /// Holds the marker's lock until the launch settles (or the process ends).
     lock: Option<File>,
-    /// When the window drew its first frame, until the launch settles.
     first_frame: Option<Instant>,
 }
 
 impl Launch {
-    /// Read Window Graphics in the settings folder `dir`, switch it to OpenGL when the previous
-    /// launch stopped as its window opened (where OpenGL exists: not macOS), and leave this
-    /// launch's marker. `env_override`: `WGPU_BACKEND` is set.
+    /// Read Window Graphics, apply crash recovery, and leave this launch's marker.
+    /// WGPU_BACKEND overrides saved preferences and disables the launch guard.
     pub fn begin(dir: Option<&Path>, env_override: bool) -> Launch {
-        let Some(dir) = dir.filter(|_| !env_override) else { return Launch::default() };
+        let Some(dir) = dir.filter(|_| !env_override) else {
+            return Launch::default();
+        };
         let prefs_path = dir.join(PREFS_FILE);
-        let mut prefs = std::fs::read_to_string(&prefs_path).map(|t| Prefs::from_json(&t)).unwrap_or_default();
+        let mut prefs = std::fs::read_to_string(&prefs_path)
+            .map(|text| Prefs::from_json(&text))
+            .unwrap_or_default();
         let marker = dir.join(MARKER);
-        // Locked by another launch that is still opening its window: not a crash.
-        let held = File::open(&marker).is_ok_and(|f| matches!(f.try_lock(), Err(std::fs::TryLockError::WouldBlock)));
+        let held = File::open(&marker)
+            .is_ok_and(|file| matches!(file.try_lock(), Err(std::fs::TryLockError::WouldBlock)));
         let mut notice = None;
+
         if marker.exists() && !held {
             if let Some((next, label)) = crash_fallback(&prefs.startup.window_graphics) {
                 prefs.startup.window_graphics = next.into();
                 match std::fs::create_dir_all(dir).and_then(|()| std::fs::write(&prefs_path, prefs.to_json())) {
-                    Ok(()) => log::warn!("the last launch stopped as its window opened: trying {label}"),
-                    Err(e) => log::warn!("the last launch stopped as its window opened; saving Window Graphics failed: {e}"),
+                    Ok(()) => log::warn!("the previous launch stopped while opening the window; trying {label}"),
+                    Err(error) => log::warn!("could not save Window Graphics fallback: {error}"),
                 }
                 notice = Some(format!(
-                    "EffectCraft's last launch stopped while starting graphics. It will try {label} this time. \\
-                     You can choose another backend in Settings ▸ Startup & Repair ▸ Window Graphics."
+                    "EffectCraft's previous launch stopped while starting graphics. It will try {label} this time. You can change this in Settings > Startup & Repair > Window Graphics."
                 ));
             }
         }
+
         let backends = backends_for_choice(&prefs.startup.window_graphics);
         let (marker, lock) = match std::fs::create_dir_all(dir).and_then(|()| File::create(&marker)) {
-            // Where locks aren't available the guard works as before.
-            Ok(f) => (Some(marker), f.try_lock().is_ok().then_some(f)),
-            Err(e) => {
-                log::warn!("launch marker: {e}");
+            Ok(file) => (Some(marker), file.try_lock().is_ok().then_some(file)),
+            Err(error) => {
+                log::warn!("launch marker: {error}");
                 (None, None)
             }
         };
         Launch { backends, notice, marker, lock, first_frame: None }
     }
 
-    /// The window drew a frame. Until the launch has settled, returns how long that still takes
-    /// (ask for a repaint then, so that an idle window settles too).
+    /// Called when the window draws a frame. Removes the marker after SETTLE.
     pub fn frame_drawn(&mut self) -> Option<Duration> {
         self.frame_drawn_at(Instant::now())
     }
@@ -122,38 +106,55 @@ impl Launch {
         Some(left)
     }
 
-    /// The app quits normally: however soon after opening, that's no crash.
+    /// A normal exit is not a crash, even if the user closes the window immediately.
     pub fn exited(&mut self) {
         self.settled();
     }
 
-    /// The launch made it: release and remove its marker.
     fn settled(&mut self) {
         self.lock = None;
-        if let Some(m) = self.marker.take()
-            && let Err(e) = std::fs::remove_file(&m)
+        if let Some(marker) = self.marker.take()
+            && let Err(error) = std::fs::remove_file(&marker)
         {
-            log::warn!("launch marker: {e}");
+            log::warn!("launch marker: {error}");
         }
     }
 }
 
-/// The selected backend failed to create the window. Save the next fallback and clear the
-/// launch marker so returned startup errors don't cause repeated failures with the same backend.
+/// A returned window-startup error should persist the next backend and clear the stale marker.
+/// Automatic on Windows advances to Vulkan; a failed Vulkan run advances to GL; failed GL returns
+/// to Automatic so the app cannot become stranded on compatibility mode.
 pub fn backend_failed(dir: Option<&Path>, backend: Option<Backends>) {
-    let Some(dir) = dir else { return };
+    let Some(dir) = dir else {
+        return;
+    };
     let fallback = match backend {
         Some(Backends::DX12) => "vulkan",
         Some(Backends::VULKAN) => "gl",
         Some(Backends::GL) => "auto",
         _ if cfg!(target_os = "windows") => "vulkan",
         _ if cfg!(target_os = "linux") => "gl",
-        _ => "#[cfg(test)]
+        _ => "auto",
+    };
+    let prefs_path = dir.join(PREFS_FILE);
+    let mut prefs = std::fs::read_to_string(&prefs_path)
+        .map(|text| Prefs::from_json(&text))
+        .unwrap_or_default();
+    prefs.startup.window_graphics = fallback.into();
+    if let Err(error) = std::fs::write(&prefs_path, prefs.to_json()) {
+        log::warn!("saving Window Graphics failed: {error}");
+    }
+    let _ = std::fs::remove_file(dir.join(MARKER));
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
     fn window_graphics(dir: &Path) -> String {
-        Prefs::from_json(&std::fs::read_to_string(dir.join(PREFS_FILE)).unwrap_or_default()).startup.window_graphics
+        Prefs::from_json(&std::fs::read_to_string(dir.join(PREFS_FILE)).unwrap_or_default())
+            .startup
+            .window_graphics
     }
 
     fn temp_dir(label: &str) -> PathBuf {
@@ -163,7 +164,7 @@ mod tests {
     }
 
     #[test]
-    fn explicit_window_graphics_choices_map_to_the_selected_backend() {
+    fn explicit_window_graphics_choices_map_to_backends() {
         assert_eq!(backends_for_choice("auto"), None);
         if cfg!(target_os = "windows") {
             assert_eq!(backends_for_choice("dx12"), Some(Backends::DX12));
@@ -181,7 +182,7 @@ mod tests {
     }
 
     #[test]
-    fn crash_fallback_prefers_vulkan_before_opengl_on_windows() {
+    fn crash_fallback_prefers_vulkan_before_gl_on_windows() {
         if cfg!(target_os = "windows") {
             assert_eq!(crash_fallback("auto"), Some(("vulkan", "Vulkan")));
             assert_eq!(crash_fallback("dx12"), Some(("vulkan", "Vulkan")));
