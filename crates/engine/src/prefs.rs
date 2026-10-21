@@ -39,6 +39,19 @@ pub const LANGUAGES: &[(&str, &str)] = &[
 ];
 
 /// Settings ▸ Startup & Repair ▸ Window Graphics: (label, `startup.windowGraphics` value).
+#[cfg(target_os = "windows")]
+pub const WINDOW_GRAPHICS: &[(&str, &str)] = &[
+    ("Automatic", "auto"),
+    ("DirectX 12", "dx12"),
+    ("Vulkan", "vulkan"),
+    ("OpenGL (compatibility)", "gl"),
+];
+#[cfg(target_os = "linux")]
+pub const WINDOW_GRAPHICS: &[(&str, &str)] =
+    &[("Automatic", "auto"), ("Vulkan", "vulkan"), ("OpenGL (compatibility)", "gl")];
+#[cfg(target_os = "macos")]
+pub const WINDOW_GRAPHICS: &[(&str, &str)] = &[("Automatic (Metal)", "auto")];
+#[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
 pub const WINDOW_GRAPHICS: &[(&str, &str)] = &[("Automatic", "auto"), ("OpenGL (compatibility)", "gl")];
 
 /// Settings ▸ Appearance ▸ Appearance Mode: (label, `appearance.appearanceMode` value). Auto
@@ -121,9 +134,8 @@ page!(Startup {
     show_home_on_open_project: bool = false,
     /// After a crash, offer to open the most recent auto-save.
     offer_crash_recovery: bool = true,
-    /// What the desktop window draws with, from the next launch: `auto` (the platform's best
-    /// graphics API) or `gl` (OpenGL, for drivers that crash with the others). A launch that
-    /// stops as its window opens switches it to `gl` (#243).
+    /// Window rendering API from the next launch. Windows can explicitly select DX12, Vulkan, or
+    /// OpenGL; Linux can select Vulkan or OpenGL. Failed startup steps through safer fallbacks.
     window_graphics: String = "auto".into(),
 });
 
@@ -1191,7 +1203,7 @@ pub fn pages() -> Vec<Page> {
                 s("startup.offerCrashRecovery", "Offer to Open the Latest Auto-Save After a Crash", B, true),
                 s("startup.windowGraphics", "Window Graphics", Kind::Choice(WINDOW_GRAPHICS), true),
                 Note(
-                    "Window Graphics applies from the next launch. When the graphics driver stops EffectCraft as its window opens, the next launch switches to OpenGL.",
+                    "Window Graphics applies from the next launch. If the graphics driver prevents startup, EffectCraft tries another backend; OpenGL compatibility can open the window but uses CPU compositing.",
                 ),
                 Section("Repair"),
                 Button { label: "Reset Settings", command: "prefs.reset", params: "{}" },
