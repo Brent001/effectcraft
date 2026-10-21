@@ -54,7 +54,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
-      - name: Compile the updated UI viewer and GPU display path
-        run: cargo check --locked -p effectcraft-ui-egui
+      - name: Verify GPU display eligibility and viewer backend selection
+        run: cargo test --locked -p effectcraft-ui-egui --lib gpu_display_eligibility_tests
       - name: Verify playback renders past cached frames
         run: cargo test --locked -p effectcraft-ui-egui --test ui_preview_align playback_prefetches_past_the_cached_frames_ahead
