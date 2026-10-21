@@ -58,12 +58,9 @@ impl Launch {
             return Launch::default();
         };
         let prefs_path = dir.join(PREFS_FILE);
-        let mut prefs = std::fs::read_to_string(&prefs_path)
-            .map(|text| Prefs::from_json(&text))
-            .unwrap_or_default();
+        let mut prefs = std::fs::read_to_string(&prefs_path).map(|text| Prefs::from_json(&text)).unwrap_or_default();
         let marker = dir.join(MARKER);
-        let held = File::open(&marker)
-            .is_ok_and(|file| matches!(file.try_lock(), Err(std::fs::TryLockError::WouldBlock)));
+        let held = File::open(&marker).is_ok_and(|file| matches!(file.try_lock(), Err(std::fs::TryLockError::WouldBlock)));
         let mut notice = None;
 
         if marker.exists() && !held {
@@ -137,9 +134,7 @@ pub fn backend_failed(dir: Option<&Path>, backend: Option<Backends>) {
         _ => "auto",
     };
     let prefs_path = dir.join(PREFS_FILE);
-    let mut prefs = std::fs::read_to_string(&prefs_path)
-        .map(|text| Prefs::from_json(&text))
-        .unwrap_or_default();
+    let mut prefs = std::fs::read_to_string(&prefs_path).map(|text| Prefs::from_json(&text)).unwrap_or_default();
     prefs.startup.window_graphics = fallback.into();
     if let Err(error) = std::fs::write(&prefs_path, prefs.to_json()) {
         log::warn!("saving Window Graphics failed: {error}");
@@ -152,9 +147,7 @@ mod tests {
     use super::*;
 
     fn window_graphics(dir: &Path) -> String {
-        Prefs::from_json(&std::fs::read_to_string(dir.join(PREFS_FILE)).unwrap_or_default())
-            .startup
-            .window_graphics
+        Prefs::from_json(&std::fs::read_to_string(dir.join(PREFS_FILE)).unwrap_or_default()).startup.window_graphics
     }
 
     fn temp_dir(label: &str) -> PathBuf {
