@@ -68,13 +68,9 @@ const FAMILIES: &[(&str, &[&str], &[&str])] = &[
 fn kernel_module(device: &wgpu::Device, label: &str, files: &[&str]) -> Result<wgpu::ShaderModule, String> {
     let src: String = BASE_WGSL.iter().chain(files).copied().collect();
     init_resource(device, &format!("{label} shader module"), || {
-        device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some(label),
-            source: wgpu::ShaderSource::Wgsl(src.into()),
-        })
+        device.create_shader_module(wgpu::ShaderModuleDescriptor { label: Some(label), source: wgpu::ShaderSource::Wgsl(src.into()) })
     })
 }
-
 
 /// Pixel format of every working texture: premultiplied RGBA, 32-bit float (32 bpc headroom;
 /// 8/16 bpc are emulated by clamping and quantising, as on the CPU).
@@ -640,10 +636,7 @@ impl GpuContext {
         // Keep core compositor kernels ready; load effect-specific shader modules/pipelines lazily.
         let sky = kernel_module(&device, "effectcraft sky", &[include_str!("shaders/sky.wgsl")])?;
         let classic3d = kernel_module(&device, "effectcraft classic3d", &[include_str!("shaders/classic3d.wgsl")])?;
-        let mut pipelines = ENTRIES
-            .iter()
-            .map(|e| Ok((*e, build_pipeline(&device, &module, &layout, e)?)))
-            .collect::<Result<HashMap<_, _>, String>>()?;
+        let mut pipelines = ENTRIES.iter().map(|e| Ok((*e, build_pipeline(&device, &module, &layout, e)?))).collect::<Result<HashMap<_, _>, String>>()?;
         for entry in crate::adv3d::SKY_KERNELS.iter().copied() {
             pipelines.insert(entry, build_pipeline(&device, &sky, &layout, entry)?);
         }
@@ -663,19 +656,12 @@ impl GpuContext {
             }
         }
 
-        let effect_pipelines: HashMap<
-            &'static str,
-            (usize, std::sync::OnceLock<Result<wgpu::ComputePipeline, String>>),
-        > = FAMILIES
+        let effect_pipelines: HashMap<&'static str, (usize, std::sync::OnceLock<Result<wgpu::ComputePipeline, String>>)> = FAMILIES
             .iter()
             .enumerate()
-            .flat_map(|(family, (_, _, kernels))| {
-                kernels.iter().map(move |entry| (*entry, (family, std::sync::OnceLock::new())))
-            })
+            .flat_map(|(family, (_, _, kernels))| kernels.iter().map(move |entry| (*entry, (family, std::sync::OnceLock::new()))))
             .collect();
-        let modules = std::iter::once(std::sync::OnceLock::from(Ok(module)))
-            .chain(FAMILIES.iter().skip(1).map(|_| std::sync::OnceLock::new()))
-            .collect();
+        let modules = std::iter::once(std::sync::OnceLock::from(Ok(module))).chain(FAMILIES.iter().skip(1).map(|_| std::sync::OnceLock::new())).collect();
 
         let dmodule = init_resource(&device, "display shader module", || {
             device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -960,9 +946,7 @@ impl GpuContext {
             return None;
         };
         cell.get_or_init(|| {
-            let built = self.family_module(*family).and_then(|module| {
-                build_pipeline(&self.device, module, &self.layout, *known_entry)
-            });
+            let built = self.family_module(*family).and_then(|module| build_pipeline(&self.device, module, &self.layout, *known_entry));
             if let Err(why) = &built {
                 log::warn!("gpu {}: kernel {known_entry} unavailable, its effects render on the CPU: {why}", self.name);
             }
