@@ -157,6 +157,69 @@ permissions:
   contents: read
 
 jobs:
+  target_selection:
+    name: Select release targets
+    runs-on: ubuntu-latest
+    outputs:
+      windows_matrix: ${{ steps.select.outputs.windows_matrix }}
+      linux_matrix: ${{ steps.select.outputs.linux_matrix }}
+      flatpak_matrix: ${{ steps.select.outputs.flatpak_matrix }}
+      arch_matrix: ${{ steps.select.outputs.arch_matrix }}
+    steps:
+      - id: select
+        name: Build architecture matrices from workflow inputs
+        shell: bash
+        env:
+          HAS_WINDOWS_X64: ${{ inputs.has-windows-x64 }}
+          HAS_WINDOWS_X86: ${{ inputs.has-windows-x86 }}
+          HAS_WINDOWS_ARM64: ${{ inputs.has-windows-arm64 }}
+          HAS_LINUX_X86_64: ${{ inputs.has-linux-x86_64 }}
+          HAS_LINUX_AARCH64: ${{ inputs.has-linux-aarch64 }}
+          HAS_FLATPAK_X86_64: ${{ inputs.has-flatpak-x86_64 }}
+          HAS_FLATPAK_AARCH64: ${{ inputs.has-flatpak-aarch64 }}
+          HAS_ARCH: ${{ inputs.has-arch }}
+          HAS_ARCH_X86_64: ${{ inputs.has-arch-x86_64 }}
+          HAS_ARCH_AARCH64: ${{ inputs.has-arch-aarch64 }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+
+          def enabled(name):
+              return os.environ.get(name, "false").lower() == "true"
+
+          windows = []
+          if enabled("HAS_WINDOWS_X64"):
+              windows.append({"arch": "x64", "target": "x86_64-pc-windows-msvc"})
+          if enabled("HAS_WINDOWS_X86"):
+              windows.append({"arch": "x86", "target": "i686-pc-windows-msvc"})
+          if enabled("HAS_WINDOWS_ARM64"):
+              windows.append({"arch": "arm64", "target": "aarch64-pc-windows-msvc"})
+
+          linux = []
+          if enabled("HAS_LINUX_X86_64"):
+              linux.append({"arch": "x86_64", "runner": "ubuntu-22.04", "deb": "amd64"})
+          if enabled("HAS_LINUX_AARCH64"):
+              linux.append({"arch": "aarch64", "runner": "ubuntu-22.04-arm", "deb": "arm64"})
+
+          flatpak = []
+          if enabled("HAS_FLATPAK_X86_64") and enabled("HAS_LINUX_X86_64"):
+              flatpak.append({"arch": "x86_64", "runner": "ubuntu-24.04"})
+          if enabled("HAS_FLATPAK_AARCH64") and enabled("HAS_LINUX_AARCH64"):
+              flatpak.append({"arch": "aarch64", "runner": "ubuntu-24.04-arm"})
+
+          arch = []
+          if enabled("HAS_ARCH") and enabled("HAS_ARCH_X86_64") and enabled("HAS_LINUX_X86_64"):
+              arch.append({"arch": "x86_64"})
+          if enabled("HAS_ARCH") and enabled("HAS_ARCH_AARCH64") and enabled("HAS_LINUX_AARCH64"):
+              arch.append({"arch": "aarch64"})
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"windows_matrix={json.dumps(windows, separators=(',', ':'))}\\n")
+              output.write(f"linux_matrix={json.dumps(linux, separators=(',', ':'))}\\n")
+              output.write(f"flatpak_matrix={json.dumps(flatpak, separators=(',', ':'))}\\n")
+              output.write(f"arch_matrix={json.dumps(arch, separators=(',', ':'))}\\n")
+          PY
   version:
     timeout-minutes: 10
     name: version
@@ -302,19 +365,16 @@ jobs:
           if [ -n "${MACOS_KEYCHAIN:-}" ]; then security delete-keychain "$MACOS_KEYCHAIN" || true; fi
 
   windows:
-    if: (matrix.arch == 'x64' && inputs.has-windows-x64) || (matrix.arch == 'x86' && inputs.has-windows-x86) || (matrix.arch == 'arm64' && inputs.has-windows-arm64)
+    if: inputs.has-windows-x64 || inputs.has-windows-x86 || inputs.has-windows-arm64
     timeout-minutes: 90
     name: Windows ${{ matrix.arch }}
-    needs: version
+    needs: [version, target_selection]
     runs-on: windows-latest
     environment: release
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - { arch: x64, target: x86_64-pc-windows-msvc }
-          - { arch: x86, target: i686-pc-windows-msvc }
-          - { arch: arm64, target: aarch64-pc-windows-msvc }
+        include: ${{ fromJSON(needs.target_selection.outputs.windows_matrix) }}
     env:
       CARGO_TERM_COLOR: always
       CARGO_INCREMENTAL: 0
@@ -432,17 +492,15 @@ jobs:
           if-no-files-found: error
 
   linux:
-    if: (matrix.arch == 'x86_64' && inputs.has-linux-x86_64) || (matrix.arch == 'aarch64' && inputs.has-linux-aarch64)
+    if: inputs.has-linux-x86_64 || inputs.has-linux-aarch64
     timeout-minutes: 90
     name: Linux ${{ matrix.arch }}
-    needs: version
+    needs: [version, target_selection]
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - { arch: x86_64, runner: ubuntu-22.04, deb: amd64 }
-          - { arch: aarch64, runner: ubuntu-22.04-arm, deb: arm64 }
+        include: ${{ fromJSON(needs.target_selection.outputs.linux_matrix) }}
     env:
       CARGO_TERM_COLOR: always
       CARGO_INCREMENTAL: 0
@@ -535,17 +593,15 @@ jobs:
           if-no-files-found: error
 
   flatpak:
-    if: (matrix.arch == 'x86_64' && inputs.has-flatpak-x86_64 && inputs.has-linux-x86_64) || (matrix.arch == 'aarch64' && inputs.has-flatpak-aarch64 && inputs.has-linux-aarch64)
+    if: (inputs.has-flatpak-x86_64 && inputs.has-linux-x86_64) || (inputs.has-flatpak-aarch64 && inputs.has-linux-aarch64)
     timeout-minutes: 90
     name: Flatpak ${{ matrix.arch }}
-    needs: [version, linux]
+    needs: [version, target_selection, linux]
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - { arch: x86_64, runner: ubuntu-24.04 }
-          - { arch: aarch64, runner: ubuntu-24.04-arm }
+        include: ${{ fromJSON(needs.target_selection.outputs.flatpak_matrix) }}
     env:
       CARGO_TERM_COLOR: always
       CARGO_INCREMENTAL: 0
@@ -633,13 +689,13 @@ jobs:
 
   arch:
     name: Arch Linux ${{ matrix.arch }}
-    if: inputs.has-arch && ((matrix.arch == 'x86_64' && inputs.has-arch-x86_64 && inputs.has-linux-x86_64) || (matrix.arch == 'aarch64' && inputs.has-arch-aarch64 && inputs.has-linux-aarch64))
-    needs: [version, linux]
+    if: inputs.has-arch && ((inputs.has-arch-x86_64 && inputs.has-linux-x86_64) || (inputs.has-arch-aarch64 && inputs.has-linux-aarch64))
+    needs: [version, target_selection, linux]
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
-        arch: [x86_64, aarch64]
+        include: ${{ fromJSON(needs.target_selection.outputs.arch_matrix) }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
@@ -1087,7 +1143,7 @@ jobs:
        inputs.has-riscv64 || inputs.has-freebsd || inputs.has-web || inputs.has-server ||
        (inputs.has-arch && ((inputs.has-arch-x86_64 && inputs.has-linux-x86_64) || (inputs.has-arch-aarch64 && inputs.has-linux-aarch64))) ||
        (inputs.has-flatpak-x86_64 && inputs.has-linux-x86_64) || (inputs.has-flatpak-aarch64 && inputs.has-linux-aarch64))
-    needs: [version, macos, windows, linux, linux-riscv64, flatpak, arch, freebsd, web, server]
+    needs: [version, target_selection, macos, windows, linux, linux-riscv64, flatpak, arch, freebsd, web, server]
     runs-on: ubuntu-latest
     environment: release
     permissions:
