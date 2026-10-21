@@ -1,4 +1,4 @@
-name: "Release"
+name: "Release Build Jobs (reusable)"
 
 on:
   workflow_call:
