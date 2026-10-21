@@ -315,19 +315,24 @@ pub(crate) struct Params {
 }
 
 impl Params {
-    fn bytes(&self) -> Vec<u8> {
-        let mut v = Vec::with_capacity(256);
+    /// Serialize the existing uniform block into a fixed-size stack buffer rather than allocating
+    /// a heap Vec for every GPU dispatch. Keep the original field order and little-endian bytes.
+    fn bytes(&self) -> [u8; 256] {
+        let mut bytes = [0u8; 256];
+        let mut offset = 0;
         for r in &self.u {
             for x in r {
-                v.extend_from_slice(&x.to_le_bytes());
+                bytes[offset..offset + 4].copy_from_slice(&x.to_le_bytes());
+                offset += 4;
             }
         }
         for r in &self.f {
             for x in r {
-                v.extend_from_slice(&x.to_le_bytes());
+                bytes[offset..offset + 4].copy_from_slice(&x.to_le_bytes());
+                offset += 4;
             }
         }
-        v
+        bytes
     }
 }
 
@@ -1471,6 +1476,37 @@ impl<'g> Enc<'g> {
 /// Mip levels of a full chain for a `w × h` texture (down to 1 × 1).
 pub(crate) fn mip_levels(w: u32, h: u32) -> u32 {
     u32::BITS - w.max(h).max(1).leading_zeros()
+}
+
+#[cfg(test)]
+mod params_bytes_tests {
+    use super::Params;
+
+    #[test]
+    fn serialization_preserves_the_original_256_byte_layout() {
+        let mut params = Params::default();
+        params.u[0] = [0x0102_0304, 0xa0b0_c0d0, u32::MAX, 7];
+        params.u[3] = [19, 23, 29, 31];
+        params.f[0] = [1.0, -2.5, f32::INFINITY, f32::from_bits(0x7fc0_1234)];
+        params.f[11] = [0.25, -0.0, 1000.0, -9.75];
+
+        // Reference the previous Vec serializer to guard field order, endianness, NaN payloads,
+        // and signed zero while changing only the allocation strategy.
+        let mut expected = Vec::with_capacity(256);
+        for row in &params.u {
+            for value in row {
+                expected.extend_from_slice(&value.to_le_bytes());
+            }
+        }
+        for row in &params.f {
+            for value in row {
+                expected.extend_from_slice(&value.to_le_bytes());
+            }
+        }
+        let actual = params.bytes();
+        assert_eq!(actual.len(), 256);
+        assert_eq!(actual.as_slice(), expected.as_slice());
+    }
 }
 
 #[cfg(test)]
