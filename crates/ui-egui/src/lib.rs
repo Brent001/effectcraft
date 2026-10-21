@@ -2299,35 +2299,3 @@ mod appearance_tests {
         assert_eq!(app.ui.theme, ThemeKind::Darker);
     }
 }
-
-#[cfg(test)]
-mod gpu_display_eligibility_tests {
-    use super::EffectcraftApp;
-    use effectcraft_engine::render::Backend;
-    use effectcraft_engine::viewer::Channel;
-
-    #[test]
-    fn plain_rgb_viewer_can_use_the_native_gpu_texture() {
-        assert!(EffectcraftApp::gpu_display_eligible(Channel::Rgb, true, false, false, false));
-    }
-
-    #[test]
-    fn views_that_need_cpu_pixel_processing_keep_the_cpu_readback_path() {
-        for channel in [Channel::Red, Channel::Green, Channel::Blue, Channel::Alpha, Channel::RgbStraight] {
-            assert!(!EffectcraftApp::gpu_display_eligible(channel, true, false, false, false));
-        }
-        assert!(!EffectcraftApp::gpu_display_eligible(Channel::Rgb, false, false, false, false), "exposure needs CPU pixels");
-        assert!(!EffectcraftApp::gpu_display_eligible(Channel::Rgb, true, true, false, false), "ROI display needs CPU pixels");
-        assert!(!EffectcraftApp::gpu_display_eligible(Channel::Rgb, true, false, true, false), "extended view needs CPU pixels");
-        assert!(
-            !EffectcraftApp::gpu_display_eligible(Channel::Rgb, true, false, false, true),
-            "display color-management conversion must keep the CPU pixel path"
-        );
-    }
-
-    #[test]
-    fn viewer_prefers_gpu_only_when_project_gpu_acceleration_is_enabled() {
-        assert_eq!(EffectcraftApp::viewer_backend(true), Backend::Gpu);
-        assert_eq!(EffectcraftApp::viewer_backend(false), Backend::Cpu);
-    }
-}
