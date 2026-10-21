@@ -96,25 +96,11 @@ struct MemoryBudgets {
 
 fn memory_budgets(device_type: wgpu::DeviceType) -> MemoryBudgets {
     match device_type {
-        wgpu::DeviceType::IntegratedGpu => MemoryBudgets {
-            upload: 512 << 20,
-            pool: 256 << 20,
-            staging: 64 << 20,
-        },
-        wgpu::DeviceType::Cpu => MemoryBudgets {
-            upload: 128 << 20,
-            pool: 64 << 20,
-            staging: 32 << 20,
-        },
-        _ => MemoryBudgets {
-            upload: UPLOAD_BUDGET,
-            pool: POOL_BUDGET,
-            staging: STAGING_BUDGET,
-        },
+        wgpu::DeviceType::IntegratedGpu => MemoryBudgets { upload: 512 << 20, pool: 256 << 20, staging: 64 << 20 },
+        wgpu::DeviceType::Cpu => MemoryBudgets { upload: 128 << 20, pool: 64 << 20, staging: 32 << 20 },
+        _ => MemoryBudgets { upload: UPLOAD_BUDGET, pool: POOL_BUDGET, staging: STAGING_BUDGET },
     }
 }
-
-
 
 /// A GPU image: premultiplied RGBA f32 in a texture (cheap to clone; immutable once written).
 /// Working images come from the context's texture pool and go back to it when the last clone
@@ -214,18 +200,12 @@ mod memory_budget_tests {
 
     #[test]
     fn integrated_gpu_budget_respects_shared_system_memory() {
-        assert_eq!(
-            memory_budgets(wgpu::DeviceType::IntegratedGpu),
-            MemoryBudgets { upload: 512 << 20, pool: 256 << 20, staging: 64 << 20 }
-        );
+        assert_eq!(memory_budgets(wgpu::DeviceType::IntegratedGpu), MemoryBudgets { upload: 512 << 20, pool: 256 << 20, staging: 64 << 20 });
     }
 
     #[test]
     fn software_gpu_uses_the_smallest_cache_budget() {
-        assert_eq!(
-            memory_budgets(wgpu::DeviceType::Cpu),
-            MemoryBudgets { upload: 128 << 20, pool: 64 << 20, staging: 32 << 20 }
-        );
+        assert_eq!(memory_budgets(wgpu::DeviceType::Cpu), MemoryBudgets { upload: 128 << 20, pool: 64 << 20, staging: 32 << 20 });
     }
 }
 
