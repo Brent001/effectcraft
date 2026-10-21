@@ -236,7 +236,7 @@ mod tests {
 
     #[test]
     fn returned_startup_error_advances_saved_choice() {
-        if cfg!(not(target_os = "windows") && not(target_os = "linux")) {
+        if !cfg!(target_os = "windows") && !cfg!(target_os = "linux") {
             return;
         }
         let dir = temp_dir("returned-failure");
