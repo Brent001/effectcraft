@@ -2028,7 +2028,7 @@ impl eframe::App for EffectcraftApp {
             self.close_after_device_loss(ui.ctx());
             return;
         }
-        self.init_gpu(ctx, frame);
+        self.init_gpu(ui.ctx(), frame);
         if !self.fonts_ready {
             ui.ctx().request_repaint();
             return;
