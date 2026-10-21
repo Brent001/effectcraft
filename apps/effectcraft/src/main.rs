@@ -173,7 +173,7 @@ fn main() -> eframe::Result {
     // Settings ▸ Startup & Repair ▸ Window Graphics, switched to OpenGL when the last launch
     // stopped as its window opened (a crashing graphics driver, #243).
     let mut launch = launch_guard::Launch::begin(effectcraft_host::config_dir().as_deref(), std::env::var_os("WGPU_BACKEND").is_some());
-    let on_gl = launch.backends == Some(eframe::wgpu::Backends::GL);
+    let selected_backend = launch.backends;
     let notice = launch.notice.take();
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
@@ -346,10 +346,16 @@ fn main() -> eframe::Result {
     match &result {
         Ok(()) => log::info!("the window closed"),
         Err(e) => {
-            if on_gl {
-                launch_guard::opengl_failed(effectcraft_host::config_dir().as_deref());
-            }
-            startup_failed(e, !on_gl && cfg!(not(target_os = "macos")));
+            launch_guard::backend_failed(effectcraft_host::config_dir().as_deref(), selected_backend);
+            let next_graphics = match selected_backend {
+                Some(eframe::wgpu::Backends::DX12) => Some("Vulkan"),
+                Some(eframe::wgpu::Backends::VULKAN) => Some("OpenGL compatibility"),
+                Some(eframe::wgpu::Backends::GL) => Some("Automatic"),
+                _ if cfg!(target_os = "windows") => Some("Vulkan"),
+                _ if cfg!(target_os = "linux") => Some("OpenGL compatibility"),
+                _ => None,
+            };
+            startup_failed(e, next_graphics);
         }
     }
     result
@@ -387,10 +393,9 @@ fn device_limits(adapter: eframe::wgpu::Limits) -> eframe::wgpu::Limits {
 }
 
 /// The window couldn't open (no usable graphics adapter or device): say so instead of quitting
-/// silently, since release builds on Windows have no console. `gl_next`: the launch guard has
-/// the next launch try OpenGL.
-fn startup_failed(e: &eframe::Error, gl_next: bool) {
-    let next = if gl_next { "The next launch will try OpenGL instead. " } else { "" };
+/// silently, since release builds on Windows have no console. `next_graphics` names the fallback.
+fn startup_failed(e: &eframe::Error, next_graphics: Option<&str>) {
+    let next = next_graphics.map(|backend| format!("The next launch will try {backend} instead. ")).unwrap_or_default();
     let message = format!(
         "EffectCraft couldn't start its window: {e}\n\n{next}Updating the graphics driver often helps. If it keeps happening, please report it at https://github.com/storytold/effectcraft/issues with this message."
     );
