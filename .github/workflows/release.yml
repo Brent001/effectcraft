@@ -6,9 +6,69 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Version override for a test run, e.g. 0.2.0-rc.1 (empty: Cargo.toml)"
+        description: "Version override for a test run (empty: Cargo.toml)"
         type: string
         default: ""
+      has-macos:
+        description: "Build macOS universal"
+        type: boolean
+        default: false
+      has-windows-x64:
+        description: "Build Windows x64"
+        type: boolean
+        default: true
+      has-windows-x86:
+        description: "Build Windows x86"
+        type: boolean
+        default: true
+      has-windows-arm64:
+        description: "Build Windows ARM64"
+        type: boolean
+        default: true
+      has-linux-x86_64:
+        description: "Build Linux x86_64"
+        type: boolean
+        default: true
+      has-linux-aarch64:
+        description: "Build Linux ARM64"
+        type: boolean
+        default: true
+      has-flatpak-x86_64:
+        description: "Build Flatpak x86_64 (requires Linux x86_64)"
+        type: boolean
+        default: true
+      has-flatpak-aarch64:
+        description: "Build Flatpak ARM64 (requires Linux ARM64)"
+        type: boolean
+        default: true
+      has-arch:
+        description: "Enable Arch Linux packaging"
+        type: boolean
+        default: true
+      has-arch-x86_64:
+        description: "Build Arch Linux x86_64 (requires Linux x86_64)"
+        type: boolean
+        default: true
+      has-arch-aarch64:
+        description: "Build Arch Linux ARM64 (requires Linux ARM64)"
+        type: boolean
+        default: true
+      has-web:
+        description: "Build WebAssembly"
+        type: boolean
+        default: true
+      has-riscv64:
+        description: "Build Linux riscv64"
+        type: boolean
+        default: true
+      has-freebsd:
+        description: "Build FreeBSD"
+        type: boolean
+        default: true
+      has-server:
+        description: "Build the headless Linux server"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -20,11 +80,26 @@ concurrency:
 jobs:
   release:
     # Intentionally tracked at @main (not SHA-pinned) so org-wide CI improvements, security fixes, and build optimizations propagate without PR churn across all craftapp repos.
-    uses: storytold/craft-common-actions/.github/workflows/release.yml@main
+    uses: ./.github/workflows/release-builds.yml
     with:
       app-name: effectcraft
       app-title: EffectCraft
       version: ${{ inputs.version }}
+      has-macos: ${{ github.event_name == 'push' || inputs.has-macos }}
+      has-windows-x64: ${{ github.event_name != 'workflow_dispatch' || inputs.has-windows-x64 }}
+      has-windows-x86: ${{ github.event_name != 'workflow_dispatch' || inputs.has-windows-x86 }}
+      has-windows-arm64: ${{ github.event_name != 'workflow_dispatch' || inputs.has-windows-arm64 }}
+      has-linux-x86_64: ${{ github.event_name != 'workflow_dispatch' || inputs.has-linux-x86_64 }}
+      has-linux-aarch64: ${{ github.event_name != 'workflow_dispatch' || inputs.has-linux-aarch64 }}
+      has-flatpak-x86_64: ${{ github.event_name != 'workflow_dispatch' || inputs.has-flatpak-x86_64 }}
+      has-flatpak-aarch64: ${{ github.event_name != 'workflow_dispatch' || inputs.has-flatpak-aarch64 }}
+      has-arch: ${{ github.event_name != 'workflow_dispatch' || inputs.has-arch }}
+      has-arch-x86_64: ${{ github.event_name != 'workflow_dispatch' || inputs.has-arch-x86_64 }}
+      has-arch-aarch64: ${{ github.event_name != 'workflow_dispatch' || inputs.has-arch-aarch64 }}
+      has-web: ${{ github.event_name != 'workflow_dispatch' || inputs.has-web }}
+      has-riscv64: ${{ github.event_name != 'workflow_dispatch' || inputs.has-riscv64 }}
+      has-freebsd: ${{ github.event_name != 'workflow_dispatch' || inputs.has-freebsd }}
+      has-server: ${{ github.event_name == 'workflow_dispatch' && inputs.has-server }}
     secrets:
       APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
       APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
