@@ -873,26 +873,20 @@ fn nested_group<'a>(g: &'a mut PropGroup, ids: &mut Ids, path: &str) -> Option<&
 /// Effects the GPU compositor (`effectcraft-gpu`) implements with the CPU effect's semantics
 /// (Mercury GPU Acceleration; the Effects & Presets GPU badge). Expression controls are
 /// pass-throughs and count as GPU effects too.
+///
+/// Effects whose GPU kernels have not passed parity with the clean CPU reference stay on the CPU
+/// until a visual-difference test proves the GPU implementation equivalent.
 pub const GPU_EFFECTS: &[&str] = &[
     "ec.blur.gaussian",
     "ec.blur.fastbox",
     "ec.blur.directional",
-    "ec.stylize.glow",
-    "ec.color.levels",
-    "ec.color.curves",
     "ec.color.huesaturation",
-    "ec.color.tint",
-    "ec.generate.fill",
     "ec.generate.gradientramp",
     "ec.noise.fractal",
     "ec.perspective.dropshadow",
-    "ec.color.brightnesscontrast",
-    "ec.color.exposure",
     "ec.channel.invert",
-    "ec.distort.transform",
     "ec.distort.turbulentdisplace",
     "ec.distort.displacementmap",
-    "ec.distort.wavewarp",
     "ec.distort.ripple",
     "ec.distort.twirl",
     "ec.distort.bulge",
@@ -905,22 +899,17 @@ pub const GPU_EFFECTS: &[&str] = &[
     "ec.blur.radial",
     "ec.blur.cameralens",
     "ec.blur.ccradialfast",
-    "ec.transition.venetian",
     "ec.transition.linearwipe",
-    "ec.transition.radialwipe",
     "ec.transition.gradientwipe",
     "ec.generate.cellpattern",
     "ec.generate.checkerboard",
     "ec.generate.grid",
-    "ec.generate.fourcolor",
     "ec.noise.noise",
     "ec.noise.addgrain",
     // effectcraft-gpu fx_color
     "ec.color.colorbalance",
     "ec.color.vibrance",
     "ec.color.lumetri",
-    "ec.color.blackwhite",
-    "ec.color.tritone",
     "ec.color.colorama",
     "ec.color.channelmixer",
     "ec.color.selectivecolor",
@@ -928,9 +917,7 @@ pub const GPU_EFFECTS: &[&str] = &[
     "ec.keying.keylight",
     // effectcraft-gpu fx_key (keying, matte, channel)
     "ec.key.colorkey",
-    "ec.key.luma",
     "ec.key.colorrange",
-    "ec.key.extract",
     "ec.key.differencematte",
     "ec.key.colordifference",
     "ec.key.screen",
@@ -953,7 +940,6 @@ pub const GPU_EFFECTS: &[&str] = &[
     "ec.channel.calculations",
     "ec.channel.compoundarithmetic",
     // effectcraft-gpu fx_tone (colour correction)
-    "ec.color.levelsic",
     "ec.color.gammapedestalgain",
     "ec.color.photofilter",
     "ec.color.changecolor",
@@ -1124,7 +1110,6 @@ pub const GPU_EFFECTS: &[&str] = &[
     "ec.time.ccforcemotionblur",
     "ec.time.ccwidetime",
     "ec.time.pixelmotionblur",
-    "ec.time.timewarp",
     // effectcraft-gpu fx_pixel2 (pixel ports, part C)
     "ec.blur.cccross",
     "ec.blur.ccradial",

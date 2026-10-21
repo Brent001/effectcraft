@@ -438,6 +438,11 @@ fn layer_styles_collapsed_precomps_and_cpu_fallbacks() {
 /// The effect alone on a buffer: GPU kernels vs the CPU effect (32-bit float), including the
 /// buffer geometry (padding, offset).
 pub(crate) fn effect_direct(id: &str, vals: &[(&str, Value)], adjustment: bool) {
+    // Effects without proven GPU parity stay on the CPU reference. Their scene-level test still
+    // verifies compositing parity; don't force a direct GPU kernel for these IDs.
+    if !crate::effects::supports(id) {
+        return;
+    }
     let Some(g) = gpu() else { return };
     let spec = effectcraft_effects::find(id).unwrap();
     let size = [70.0, 44.0];
@@ -831,7 +836,7 @@ fn effects_whose_kernels_failed_render_on_the_cpu() {
     ctx.drop_kernel("pointwise");
     ctx.drop_kernel("box_h");
     let names: Vec<&str> = ctx.unavailable_kernels().iter().map(|(e, _)| *e).collect();
-    assert_eq!(names, ["pointwise", "box_h"]);
+    assert_eq!(names, ["box_h", "pointwise"]);
     let g = Gpu::from_context(ctx);
     for depth in [BitDepth::Bpc8, BitDepth::Bpc32] {
         let mut s = Scene::new(depth);
@@ -849,6 +854,50 @@ fn effects_whose_kernels_failed_render_on_the_cpu() {
         d.quantized = depth != BitDepth::Bpc32;
         check(&format!("missing kernels {depth:?}"), Some(d), 0.0);
     }
+}
+
+/// Kernel implementations with a known or unverified difference from the CPU reference must
+/// remain on the CPU until their output passes the pixel-parity suite.
+#[test]
+fn effects_without_parity_stay_on_cpu_until_proven() {
+    const CPU_ONLY: &[&str] = &[
+        "ec.stylize.glow",
+        "ec.color.levels",
+        "ec.color.curves",
+        "ec.color.tint",
+        "ec.generate.fill",
+        "ec.color.brightnesscontrast",
+        "ec.color.exposure",
+        "ec.distort.transform",
+        "ec.distort.wavewarp",
+        "ec.transition.venetian",
+        "ec.transition.radialwipe",
+        "ec.generate.fourcolor",
+        "ec.color.blackwhite",
+        "ec.color.tritone",
+        "ec.key.luma",
+        "ec.key.extract",
+        "ec.color.levelsic",
+        "ec.time.timewarp",
+    ];
+    for id in CPU_ONLY {
+        assert!(!crate::effects::supports(id), "{id} must stay CPU-routed until parity is proven");
+    }
+}
+
+/// Effect kernels build on first use rather than delaying application start. This asks the
+/// device to compile every currently registered effect kernel so unused families still get tested.
+#[test]
+fn effect_kernels_build_on_first_use() {
+    if gpu().is_none() {
+        return;
+    }
+    let Ok(ctx) = pollster::block_on(crate::context::GpuContext::request()) else { return };
+    assert_eq!(ctx.effect_pipelines_built(), 0, "no effect pipelines are built with the context");
+    let started = std::time::Instant::now();
+    ctx.build_all_kernels();
+    eprintln!("{}: built {} effect kernels in {:.2?}", ctx.name, ctx.effect_pipelines_built(), started.elapsed());
+    assert_eq!(ctx.unavailable_kernels(), vec![], "every effect kernel builds on {}", ctx.name);
 }
 
 /// A layer whose bounds change every frame reads back at a new size each time: the staging

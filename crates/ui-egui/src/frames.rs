@@ -37,10 +37,10 @@ use rayon::prelude::*;
 /// Comp identities (and the project snapshots behind them) the RAM preview keeps frames of.
 const MAX_KEEPERS: usize = 64;
 
-/// GPU frames kept for RAM preview (bytes of video memory) at first. wgpu can't tell how much
-/// video memory there is: each time the device runs out, the budget halves (to
+/// GPU frames kept for RAM preview (bytes of video memory) at first. Keep this moderate because
+/// integrated GPUs share physical RAM with the editor; on OOM the budget halves (to
 /// [`MIN_GPU_BUDGET`]) and the frame renders on the CPU (#106).
-const GPU_BUDGET: usize = 1 << 30;
+const GPU_BUDGET: usize = 256 << 20;
 const MIN_GPU_BUDGET: usize = 64 << 20;
 
 /// A rendered viewer frame: CPU pixels or a GPU texture.
@@ -244,11 +244,10 @@ pub struct RenderSource {
     pub layer_cache: Arc<LayerCache>,
     /// GPU compositor on the viewer's device (Mercury GPU Acceleration), if available.
     pub gpu: Option<Gpu>,
-    /// Keep GPU frames on the GPU for the viewer (native egui-wgpu textures). Off on the
-    /// desktop: Show Channel / exposure / region-of-interest drawing read the CPU frame texture,
-    /// so GPU frames are read back (the compositing still runs on the GPU). On in the browser
-    /// while the viewer draws plainly, because there frames can't be read back synchronously
-    /// (`EffectcraftApp::gpu_display`).
+    /// Keep a frame as a native egui-wgpu texture when the viewer can display it without
+    /// CPU pixel processing (ordinary RGB, zero exposure, no ROI/extended view). Desktop also
+    /// keeps the readback path while persistent disk caching needs CPU frame pixels. The browser
+    /// may display plain GPU frames directly because it can't wait for synchronous readback.
     pub gpu_display: bool,
     /// The persistent disk cache, when enabled.
     pub disk: Option<Arc<DiskCache>>,

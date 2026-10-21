@@ -1,0 +1,62 @@
+name: Behavior-preserving performance checks
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "crates/gpu/**"
+      - "crates/effects/**"
+      - "crates/ui-egui/**"
+      - "crates/render/**"
+      - "crates/media/**"
+      - ".github/workflows/behavior-preserving-performance.yml"
+      - "Cargo.toml"
+      - "Cargo.lock"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: performance-checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  formatting:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          components: rustfmt
+      - name: Check Rust formatting
+        run: cargo fmt --all -- --check
+
+  gpu-parameter-layout:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+      - name: Verify GPU dispatch bytes are unchanged
+        run: cargo test --locked -p effectcraft-gpu params_bytes_tests::serialization_preserves_the_original_256_byte_layout
+      - name: Keep known GPU mismatches on the CPU reference
+        run: cargo test --locked -p effectcraft-gpu effects_without_parity_stay_on_cpu_until_proven
+      - name: Verify integrated-GPU memory budgets
+        run: cargo test --locked -p effectcraft-gpu memory_budget_tests
+
+  preview-prefetch-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+      - name: Compile the updated UI viewer and GPU display path
+        run: cargo check --locked -p effectcraft-ui-egui
+      - name: Verify playback renders past cached frames
+        run: cargo test --locked -p effectcraft-ui-egui --test ui_preview_align playback_prefetches_past_the_cached_frames_ahead

@@ -310,6 +310,15 @@ pub struct EffectcraftApp {
     /// The GPU compositor on that device (None: no usable adapter → CPU only).
     pub(crate) gpu: Option<effectcraft_gpu::Gpu>,
     gpu_checked: bool,
+    /// Native desktop pipeline construction runs off the UI thread so slow shader compilation
+    /// cannot prevent the first window frame from being presented.
+    #[cfg(not(target_arch = "wasm32"))]
+    gpu_init_rx: Option<Receiver<Result<effectcraft_gpu::Gpu, String>>>,
+    #[cfg(not(target_arch = "wasm32"))]
+    gpu_init_render_state: Option<eframe::egui_wgpu::RenderState>,
+    /// When initialization started, used to keep a hung driver from remaining "initializing".
+    #[cfg(not(target_arch = "wasm32"))]
+    gpu_init_started: Option<std::time::Instant>,
     gpu_failures: Option<gpu_failure::GpuFailureBridge>,
     gpu_failure_applied: Option<bool>,
     /// The graphics device was lost and the window is closing (see `close_after_device_loss`);
@@ -405,6 +414,12 @@ impl EffectcraftApp {
             wgpu: None,
             gpu: None,
             gpu_checked: false,
+            #[cfg(not(target_arch = "wasm32"))]
+            gpu_init_rx: None,
+            #[cfg(not(target_arch = "wasm32"))]
+            gpu_init_render_state: None,
+            #[cfg(not(target_arch = "wasm32"))]
+            gpu_init_started: None,
             gpu_failures: None,
             gpu_failure_applied: None,
             device_lost_close: None,
@@ -648,17 +663,33 @@ impl EffectcraftApp {
         }
     }
 
-    /// Keep GPU-composited viewer frames on the GPU (drawn from their texture). The browser can't
-    /// read frames back (its thread can't wait for the GPU), so there the viewer shows GPU frames
-    /// directly whenever it draws them plainly (RGB, no exposure, no region of interest); the
-    /// desktop reads them back (see [`frames::RenderSource::gpu_display`]).
+    fn gpu_display_eligible(
+        channel: effectcraft_engine::viewer::Channel,
+        exposure_zero: bool,
+        has_roi: bool,
+        extended_view: bool,
+        needs_display_color_conversion: bool,
+    ) -> bool {
+        channel == effectcraft_engine::viewer::Channel::Rgb && exposure_zero && !has_roi && !extended_view && !needs_display_color_conversion
+    }
+
+    fn viewer_backend(gpu_acceleration_enabled: bool) -> effectcraft_engine::render::Backend {
+        if gpu_acceleration_enabled { effectcraft_engine::render::Backend::Gpu } else { effectcraft_engine::render::Backend::Cpu }
+    }
+
+    /// Whether the viewer can draw the final RGB frame directly from its GPU texture without
+    /// CPU pixel processing. On desktop, keep the existing CPU path when persistent disk caching
+    /// needs a CPU frame to save; the browser's existing GPU-display behavior is unchanged.
     fn gpu_display(&self) -> bool {
         let v = &self.session.state.viewer;
-        cfg!(target_arch = "wasm32")
-            && v.channel == effectcraft_engine::viewer::Channel::Rgb
-            && v.exposure == 0.0
-            && self.session.state.region_of_interest.is_none()
-            && self.ui.viewer.extended.is_none()
+        let plain_rgb = Self::gpu_display_eligible(
+            v.channel,
+            v.exposure == 0.0,
+            self.session.state.region_of_interest.is_some(),
+            self.ui.viewer.extended.is_some(),
+            effectcraft_engine::viewer::DisplayColor::of(&self.session).is_some(),
+        );
+        plain_rgb && (cfg!(target_arch = "wasm32") || self.session.disk_cache.is_none())
     }
 
     /// The UI draws its panels and handles input such as dropped files. Until the fonts are
@@ -756,10 +787,13 @@ impl EffectcraftApp {
         }
     }
 
-    /// Set up the GPU compositor on egui-wgpu's device (once). Without an adapter that runs
-    /// compute shaders (WebGL2, software GL) everything stays on the CPU.
-    pub(crate) fn init_gpu(&mut self, frame: &eframe::Frame) {
+    /// Set up the GPU compositor on egui-wgpu's device (once). Compile native pipelines away
+    /// from the UI thread so a slow DirectX 12/FXC driver cannot prevent the first window frame.
+    /// CPU compositing remains active until initialization succeeds.
+    pub(crate) fn init_gpu(&mut self, ctx: &egui::Context, frame: &eframe::Frame) {
         if self.gpu_checked {
+            #[cfg(not(target_arch = "wasm32"))]
+            self.poll_gpu_init(ctx);
             return;
         }
         self.gpu_checked = true;
@@ -767,7 +801,6 @@ impl EffectcraftApp {
             return;
         }
         let Some(rs) = frame.wgpu_render_state() else { return };
-        // Help ▸ System Compatibility Report names the adapter and backend the window got.
         let info = rs.adapter.get_info();
         self.session.window_adapter = Some(format!(
             "{} ({:?}, {:?}{})",
@@ -776,11 +809,102 @@ impl EffectcraftApp {
             info.device_type,
             if info.driver.is_empty() { String::new() } else { format!(", {} {}", info.driver, info.driver_info) }
         ));
-        // Backend validation can panic on shader compilation even when device creation
-        // succeeded. Keep the document and the egui renderer, and use CPU compositing.
-        let gpu = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| effectcraft_gpu::Gpu::new(&rs.adapter, rs.device.clone(), rs.queue.clone())));
-        match gpu {
-            Ok(Ok(g)) => {
+
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let adapter = rs.adapter.clone();
+            let device = rs.device.clone();
+            let queue = rs.queue.clone();
+            let (tx, rx) = std::sync::mpsc::channel();
+            let worker = std::thread::Builder::new().name("effectcraft-gpu-init".into()).spawn(move || {
+                let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| effectcraft_gpu::Gpu::new(&adapter, device, queue)))
+                    .map_err(|payload| {
+                        let reason = payload
+                            .downcast_ref::<String>()
+                            .map(String::as_str)
+                            .or_else(|| payload.downcast_ref::<&str>().copied())
+                            .unwrap_or("backend panicked");
+                        format!("GPU compositor setup panicked: {reason}")
+                    })
+                    .and_then(|result| result);
+                let _ = tx.send(result);
+            });
+            match worker {
+                Ok(_) => {
+                    self.gpu_init_rx = Some(rx);
+                    self.gpu_init_render_state = Some(rs.clone());
+                    self.gpu_init_started = Some(std::time::Instant::now());
+                    self.session.accel_note =
+                        Some("GPU compositor is initializing in the background; CPU compositing remains active until it is ready.".into());
+                    log::info!("GPU compositor: pipeline initialization started in background for {} ({:?})", info.name, info.backend);
+                    ctx.request_repaint_after(std::time::Duration::from_millis(80));
+                }
+                Err(error) => {
+                    let reason = format!("could not start GPU initialization worker: {error}");
+                    log::warn!("{reason}; using CPU compositing");
+                    self.session.accel_note = Some(reason);
+                }
+            }
+            return;
+        }
+
+        #[cfg(target_arch = "wasm32")]
+        {
+            // Browser initialization stays on its existing event-loop path; native threads are
+            // unavailable there.
+            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| effectcraft_gpu::Gpu::new(&rs.adapter, rs.device.clone(), rs.queue.clone())))
+                .map_err(|payload| {
+                    let reason =
+                        payload.downcast_ref::<String>().map(String::as_str).or_else(|| payload.downcast_ref::<&str>().copied()).unwrap_or("backend panicked");
+                    format!("GPU compositor setup panicked: {reason}")
+                })
+                .and_then(|result| result);
+            self.complete_gpu_init(rs.clone(), result);
+        }
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    fn poll_gpu_init(&mut self, ctx: &egui::Context) {
+        if self.gpu_failures.as_ref().is_some_and(|bridge| bridge.failure().is_some()) {
+            self.gpu_init_rx = None;
+            self.gpu_init_render_state = None;
+            self.gpu_init_started = None;
+            return;
+        }
+
+        const GPU_INIT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+        if self.gpu_init_started.is_some_and(|started| started.elapsed() >= GPU_INIT_TIMEOUT) {
+            self.gpu_init_rx = None;
+            self.gpu_init_render_state = None;
+            self.gpu_init_started = None;
+            let reason = "GPU compositor initialization exceeded 30 seconds; CPU compositing remains active. Check Logs/effectcraft.log for GPU errors, or change Window Graphics and restart to retry.".to_string();
+            log::error!("{reason}");
+            self.session.accel_note = Some(reason);
+            return;
+        }
+
+        let result = match self.gpu_init_rx.as_ref().map(|rx| rx.try_recv()) {
+            Some(Ok(result)) => result,
+            Some(Err(std::sync::mpsc::TryRecvError::Empty)) => {
+                ctx.request_repaint_after(std::time::Duration::from_millis(80));
+                return;
+            }
+            Some(Err(std::sync::mpsc::TryRecvError::Disconnected)) => Err("GPU initialization worker exited without a result".to_string()),
+            None => return,
+        };
+
+        self.gpu_init_rx = None;
+        self.gpu_init_started = None;
+        let Some(rs) = self.gpu_init_render_state.take() else {
+            self.session.accel_note = Some("GPU initialization finished without a presentation state; using CPU compositing.".into());
+            return;
+        };
+        self.complete_gpu_init(rs, result);
+    }
+
+    fn complete_gpu_init(&mut self, rs: eframe::egui_wgpu::RenderState, result: Result<effectcraft_gpu::Gpu, String>) {
+        match result {
+            Ok(g) => {
                 if let Some(bridge) = &self.gpu_failures {
                     bridge.forward_to(g.context().device_failure_notifier());
                     if bridge.failure().is_some() {
@@ -788,18 +912,14 @@ impl EffectcraftApp {
                     }
                 }
                 log::info!("GPU compositor: {}", effectcraft_engine::render::Accelerator::name(&g));
+                self.session.accel_note = None;
                 self.session.accel = Some(Arc::new(g.clone()));
                 self.gpu = Some(g);
-                self.wgpu = Some(rs.clone());
+                self.wgpu = Some(rs);
             }
-            Ok(Err(e)) => {
-                log::info!("GPU compositor unavailable: {e}");
-                self.session.accel_note = Some(format!("GPU compositor unavailable: {e}"));
-            }
-            Err(e) => {
-                let reason = e.downcast_ref::<String>().map(String::as_str).or_else(|| e.downcast_ref::<&str>().copied()).unwrap_or("backend panicked");
-                log::warn!("GPU compositor setup failed; using CPU compositing: {reason}");
-                self.session.accel_note = Some(format!("GPU compositor setup failed: {reason}"));
+            Err(error) => {
+                log::info!("GPU compositor unavailable: {error}");
+                self.session.accel_note = Some(format!("GPU compositor unavailable: {error}"));
             }
         }
     }
@@ -958,7 +1078,7 @@ impl EffectcraftApp {
             draft: self.ui.viewer.fast_preview || draft,
             view: self.session.view_camera(comp),
             roi,
-            backend: effectcraft_engine::render::Backend::Auto,
+            backend: Self::viewer_backend(self.session.project.settings.gpu_acceleration),
             nested_switches: self.session.prefs.general.switches_affect_nested_comps,
             draft_shadows: self.session.prefs.three_d.realtime_shadows,
             proxy: Default::default(),
@@ -1238,8 +1358,15 @@ impl EffectcraftApp {
         }
         let step = plan.map_or(1, |p| p.step);
         // Never further ahead than the RAM preview holds: those frames would evict the ones the
-        // preview shows first, or be evicted before it gets there (#595).
-        let window = (ahead * 3).min(self.frames_that_fit(&c, scale) - 1);
+        // preview shows first, or be evicted before it gets there (#595). While playing, scan far
+        // enough through the RAM-preview range to find uncached frames after a loop or cache hit;
+        // otherwise the workers can sit idle while all nearby frames are already cached.
+        let fit_ahead = self.frames_that_fit(&c, scale) - 1;
+        let window = match plan.filter(|_| self.playback.playing) {
+            Some(p) => fit_ahead.min((p.end - p.start) / p.step.max(1) + 1),
+            None => (ahead * 3).min(fit_ahead),
+        };
+        let cached = self.frames.cached_frames(&series);
         for k in 0..window {
             if queued >= ahead as usize || !video {
                 break;
@@ -1257,7 +1384,7 @@ impl EffectcraftApp {
                     f
                 }
             };
-            if !self.frames.is_cached(&FrameKey { frame: f, ..series }) {
+            if cached.binary_search(&f).is_err() {
                 self.request_frame(cid, f, scale);
                 queued += 1;
             }
@@ -1907,7 +2034,7 @@ impl eframe::App for EffectcraftApp {
             self.close_after_device_loss(ui.ctx());
             return;
         }
-        self.init_gpu(frame);
+        self.init_gpu(ui.ctx(), frame);
         if !self.fonts_ready {
             ui.ctx().request_repaint();
             return;

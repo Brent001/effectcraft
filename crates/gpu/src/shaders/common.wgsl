@@ -539,3 +539,22 @@ fn curve_encode(curve: u32, v: f32) -> f32 {
     }
     return select(e, -e, v < 0.0);
 }
+
+// Component writes through a runtime index (`v[i] = x`). FXC (DirectX 12) cannot address a
+// vector component that way: it aborts or tries to unroll the surrounding loops, so the
+// kernel fails to build. A select-based write gives the same result on every backend.
+fn vset3f(v: vec3<f32>, i: u32, x: f32) -> vec3<f32> {
+    return select(v, vec3<f32>(x), vec3<u32>(0u, 1u, 2u) == vec3<u32>(i));
+}
+
+fn vset4f(v: vec4<f32>, i: u32, x: f32) -> vec4<f32> {
+    return select(v, vec4<f32>(x), vec4<u32>(0u, 1u, 2u, 3u) == vec4<u32>(i));
+}
+
+fn vset3u(v: vec3<u32>, i: u32, x: u32) -> vec3<u32> {
+    return select(v, vec3<u32>(x), vec3<u32>(0u, 1u, 2u) == vec3<u32>(i));
+}
+
+fn vset4u(v: vec4<u32>, i: u32, x: u32) -> vec4<u32> {
+    return select(v, vec4<u32>(x), vec4<u32>(0u, 1u, 2u, 3u) == vec4<u32>(i));
+}
