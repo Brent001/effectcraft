@@ -40,15 +40,9 @@ pub const LANGUAGES: &[(&str, &str)] = &[
 
 /// Settings ▸ Startup & Repair ▸ Window Graphics: (label, `startup.windowGraphics` value).
 #[cfg(target_os = "windows")]
-pub const WINDOW_GRAPHICS: &[(&str, &str)] = &[
-    ("Automatic", "auto"),
-    ("DirectX 12", "dx12"),
-    ("Vulkan", "vulkan"),
-    ("OpenGL (compatibility)", "gl"),
-];
+pub const WINDOW_GRAPHICS: &[(&str, &str)] = &[("Automatic", "auto"), ("DirectX 12", "dx12"), ("Vulkan", "vulkan"), ("OpenGL (compatibility)", "gl")];
 #[cfg(target_os = "linux")]
-pub const WINDOW_GRAPHICS: &[(&str, &str)] =
-    &[("Automatic", "auto"), ("Vulkan", "vulkan"), ("OpenGL (compatibility)", "gl")];
+pub const WINDOW_GRAPHICS: &[(&str, &str)] = &[("Automatic", "auto"), ("Vulkan", "vulkan"), ("OpenGL (compatibility)", "gl")];
 #[cfg(target_os = "macos")]
 pub const WINDOW_GRAPHICS: &[(&str, &str)] = &[("Automatic (Metal)", "auto")];
 #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
