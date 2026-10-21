@@ -801,16 +801,16 @@ impl EffectcraftApp {
             let queue = rs.queue.clone();
             let (tx, rx) = std::sync::mpsc::channel();
             let worker = std::thread::Builder::new().name("effectcraft-gpu-init".into()).spawn(move || {
-                let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    effectcraft_gpu::Gpu::new(&adapter, device, queue)
-                }))
-                .map_err(|payload| {
-                    let reason = payload.downcast_ref::<String>().map(String::as_str)
-                        .or_else(|| payload.downcast_ref::<&str>().copied())
-                        .unwrap_or("backend panicked");
-                    format!("GPU compositor setup panicked: {reason}")
-                })
-                .and_then(|result| result);
+                let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| effectcraft_gpu::Gpu::new(&adapter, device, queue)))
+                    .map_err(|payload| {
+                        let reason = payload
+                            .downcast_ref::<String>()
+                            .map(String::as_str)
+                            .or_else(|| payload.downcast_ref::<&str>().copied())
+                            .unwrap_or("backend panicked");
+                        format!("GPU compositor setup panicked: {reason}")
+                    })
+                    .and_then(|result| result);
                 let _ = tx.send(result);
             });
             match worker {
@@ -818,13 +818,9 @@ impl EffectcraftApp {
                     self.gpu_init_rx = Some(rx);
                     self.gpu_init_render_state = Some(rs.clone());
                     self.gpu_init_started = Some(std::time::Instant::now());
-                    self.session.accel_note = Some(
-                        "GPU compositor is initializing in the background; CPU compositing remains active until it is ready.".into()
-                    );
-                    log::info!(
-                        "GPU compositor: pipeline initialization started in background for {} ({:?})",
-                        info.name, info.backend
-                    );
+                    self.session.accel_note =
+                        Some("GPU compositor is initializing in the background; CPU compositing remains active until it is ready.".into());
+                    log::info!("GPU compositor: pipeline initialization started in background for {} ({:?})", info.name, info.backend);
                     ctx.request_repaint_after(std::time::Duration::from_millis(80));
                 }
                 Err(error) => {
@@ -840,16 +836,13 @@ impl EffectcraftApp {
         {
             // Browser initialization stays on its existing event-loop path; native threads are
             // unavailable there.
-            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                effectcraft_gpu::Gpu::new(&rs.adapter, rs.device.clone(), rs.queue.clone())
-            }))
-            .map_err(|payload| {
-                let reason = payload.downcast_ref::<String>().map(String::as_str)
-                    .or_else(|| payload.downcast_ref::<&str>().copied())
-                    .unwrap_or("backend panicked");
-                format!("GPU compositor setup panicked: {reason}")
-            })
-            .and_then(|result| result);
+            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| effectcraft_gpu::Gpu::new(&rs.adapter, rs.device.clone(), rs.queue.clone())))
+                .map_err(|payload| {
+                    let reason =
+                        payload.downcast_ref::<String>().map(String::as_str).or_else(|| payload.downcast_ref::<&str>().copied()).unwrap_or("backend panicked");
+                    format!("GPU compositor setup panicked: {reason}")
+                })
+                .and_then(|result| result);
             self.complete_gpu_init(rs.clone(), result);
         }
     }
@@ -880,28 +873,20 @@ impl EffectcraftApp {
                 ctx.request_repaint_after(std::time::Duration::from_millis(80));
                 return;
             }
-            Some(Err(std::sync::mpsc::TryRecvError::Disconnected)) => {
-                Err("GPU initialization worker exited without a result".to_string())
-            }
+            Some(Err(std::sync::mpsc::TryRecvError::Disconnected)) => Err("GPU initialization worker exited without a result".to_string()),
             None => return,
         };
 
         self.gpu_init_rx = None;
         self.gpu_init_started = None;
         let Some(rs) = self.gpu_init_render_state.take() else {
-            self.session.accel_note = Some(
-                "GPU initialization finished without a presentation state; using CPU compositing.".into()
-            );
+            self.session.accel_note = Some("GPU initialization finished without a presentation state; using CPU compositing.".into());
             return;
         };
         self.complete_gpu_init(rs, result);
     }
 
-    fn complete_gpu_init(
-        &mut self,
-        rs: eframe::egui_wgpu::RenderState,
-        result: Result<effectcraft_gpu::Gpu, String>,
-    ) {
+    fn complete_gpu_init(&mut self, rs: eframe::egui_wgpu::RenderState, result: Result<effectcraft_gpu::Gpu, String>) {
         match result {
             Ok(g) => {
                 if let Some(bridge) = &self.gpu_failures {
