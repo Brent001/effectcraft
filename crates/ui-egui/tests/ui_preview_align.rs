@@ -273,18 +273,12 @@ fn playback_prefetches_past_the_cached_frames_ahead() {
         h.state().request_frame(cid, frame, scale);
     }
     for _ in 0..4000 {
-        if h.state().frames.cached_frames(&series).len() >= 120
-            && h.state().frames.inflight() == 0
-        {
+        if h.state().frames.cached_frames(&series).len() >= 120 && h.state().frames.inflight() == 0 {
             break;
         }
         std::thread::sleep(std::time::Duration::from_millis(2));
     }
-    assert_eq!(
-        h.state().frames.cached_frames(&series),
-        (0..120).collect::<Vec<_>>(),
-        "precondition: the first 120 frames are cached"
-    );
+    assert_eq!(h.state().frames.cached_frames(&series), (0..120).collect::<Vec<_>>(), "precondition: the first 120 frames are cached");
 
     h.state_mut().session.set_time(Tick::ZERO);
     invoke(&mut h, "playback.toggle", json!({}));
@@ -301,10 +295,7 @@ fn playback_prefetches_past_the_cached_frames_ahead() {
             break;
         }
     }
-    assert!(
-        h.state().frames.cached_frames(&series).iter().any(|&frame| frame >= 120),
-        "frames beyond the cached run should render while playback continues"
-    );
+    assert!(h.state().frames.cached_frames(&series).iter().any(|&frame| frame >= 120), "frames beyond the cached run should render while playback continues");
 }
 
 #[test]
