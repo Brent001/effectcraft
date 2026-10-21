@@ -2319,7 +2319,10 @@ mod gpu_display_eligibility_tests {
         assert!(!EffectcraftApp::gpu_display_eligible(Channel::Rgb, false, false, false, false), "exposure needs CPU pixels");
         assert!(!EffectcraftApp::gpu_display_eligible(Channel::Rgb, true, true, false, false), "ROI display needs CPU pixels");
         assert!(!EffectcraftApp::gpu_display_eligible(Channel::Rgb, true, false, true, false), "extended view needs CPU pixels");
-        assert!(!EffectcraftApp::gpu_display_eligible(Channel::Rgb, true, false, false, true), "display color-management conversion must keep the CPU pixel path");
+        assert!(
+            !EffectcraftApp::gpu_display_eligible(Channel::Rgb, true, false, false, true),
+            "display color-management conversion must keep the CPU pixel path"
+        );
     }
 
     #[test]
