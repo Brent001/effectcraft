@@ -259,6 +259,54 @@ fn cache_frames_when_idle_fills_the_work_area() {
     assert_eq!(n, 240, "the work area is cached while idle");
 }
 
+/// Playback should keep rendering the next frames even when the nearby preview frames are
+/// already cached (for example, immediately after looping through a cached section).
+#[test]
+fn playback_prefetches_past_the_cached_frames_ahead() {
+    let mut h = harness();
+    let cid = h.state().session.active_comp_id().unwrap();
+    let series = h.state().shown_series(cid);
+    let scale = series.scale as f64 / 1000.0;
+
+    // Pre-cache a run longer than the old look-ahead window.
+    for frame in 0..120 {
+        h.state().request_frame(cid, frame, scale);
+    }
+    for _ in 0..4000 {
+        if h.state().frames.cached_frames(&series).len() >= 120
+            && h.state().frames.inflight() == 0
+        {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(2));
+    }
+    assert_eq!(
+        h.state().frames.cached_frames(&series),
+        (0..120).collect::<Vec<_>>(),
+        "precondition: the first 120 frames are cached"
+    );
+
+    h.state_mut().session.set_time(Tick::ZERO);
+    invoke(&mut h, "playback.toggle", json!({}));
+    h.run_steps(2);
+    assert!(h.state().playback.playing);
+
+    for _ in 0..4000 {
+        if h.state().frames.cached_frames(&series).iter().any(|&frame| frame >= 120) {
+            break;
+        }
+        h.step();
+        std::thread::sleep(std::time::Duration::from_millis(1));
+        if h.state().session.time() >= Tick::from_seconds_f64(1.0) {
+            break;
+        }
+    }
+    assert!(
+        h.state().frames.cached_frames(&series).iter().any(|&frame| frame >= 120),
+        "frames beyond the cached run should render while playback continues"
+    );
+}
+
 #[test]
 fn cache_frames_when_idle_survives_an_inverted_work_area() {
     let mut h = harness();
