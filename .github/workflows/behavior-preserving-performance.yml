@@ -45,6 +45,8 @@ jobs:
         run: cargo test --locked -p effectcraft-gpu params_bytes_tests::serialization_preserves_the_original_256_byte_layout
       - name: Keep known GPU mismatches on the CPU reference
         run: cargo test --locked -p effectcraft-gpu effects_without_parity_stay_on_cpu_until_proven
+      - name: Verify integrated-GPU memory budgets
+        run: cargo test --locked -p effectcraft-gpu memory_budget_tests
 
   preview-prefetch-regression:
     runs-on: ubuntu-latest
