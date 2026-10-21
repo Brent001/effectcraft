@@ -1238,8 +1238,15 @@ impl EffectcraftApp {
         }
         let step = plan.map_or(1, |p| p.step);
         // Never further ahead than the RAM preview holds: those frames would evict the ones the
-        // preview shows first, or be evicted before it gets there (#595).
-        let window = (ahead * 3).min(self.frames_that_fit(&c, scale) - 1);
+        // preview shows first, or be evicted before it gets there (#595). While playing, scan far
+        // enough through the RAM-preview range to find uncached frames after a loop or cache hit;
+        // otherwise the workers can sit idle while all nearby frames are already cached.
+        let fit_ahead = self.frames_that_fit(&c, scale) - 1;
+        let window = match plan.filter(|_| self.playback.playing) {
+            Some(p) => fit_ahead.min((p.end - p.start) / p.step.max(1) + 1),
+            None => (ahead * 3).min(fit_ahead),
+        };
+        let cached = self.frames.cached_frames(&series);
         for k in 0..window {
             if queued >= ahead as usize || !video {
                 break;
@@ -1257,7 +1264,7 @@ impl EffectcraftApp {
                     f
                 }
             };
-            if !self.frames.is_cached(&FrameKey { frame: f, ..series }) {
+            if cached.binary_search(&f).is_err() {
                 self.request_frame(cid, f, scale);
                 queued += 1;
             }
