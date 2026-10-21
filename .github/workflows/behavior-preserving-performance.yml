@@ -1,0 +1,65 @@
+name: Behavior-preserving performance checks
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "crates/gpu/**"
+      - "crates/ui-egui/**"
+      - "crates/render/**"
+      - "crates/media/**"
+      - ".github/workflows/behavior-preserving-performance.yml"
+      - "Cargo.toml"
+      - "Cargo.lock"
+  push:
+    branches: ["perf/render-gpu-parity"]
+    paths:
+      - "crates/gpu/**"
+      - "crates/ui-egui/**"
+      - "crates/render/**"
+      - "crates/media/**"
+      - ".github/workflows/behavior-preserving-performance.yml"
+      - "Cargo.toml"
+      - "Cargo.lock"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: performance-checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  formatting:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # stable
+        with:
+          toolchain: stable
+          components: rustfmt
+      - name: Check Rust formatting
+        run: cargo fmt --all -- --check
+
+  gpu-parameter-layout:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # stable
+        with:
+          toolchain: stable
+      - name: Verify GPU dispatch bytes are unchanged
+        run: cargo test --locked -p effectcraft-gpu params_bytes_tests::serialization_preserves_the_original_256_byte_layout
+
+  preview-prefetch-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # stable
+        with:
+          toolchain: stable
+      - name: Verify playback renders past cached frames
+        run: cargo test --locked -p effectcraft-ui-egui --test ui_preview_align playback_prefetches_past_the_cached_frames_ahead
