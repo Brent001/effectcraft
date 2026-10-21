@@ -663,27 +663,19 @@ impl EffectcraftApp {
         }
     }
 
-fn gpu_display_eligible(
-    channel: effectcraft_engine::viewer::Channel,
-    exposure_zero: bool,
-    has_roi: bool,
-    extended_view: bool,
-    needs_display_color_conversion: bool,
-) -> bool {
-    channel == effectcraft_engine::viewer::Channel::Rgb
-        && exposure_zero
-        && !has_roi
-        && !extended_view
-        && !needs_display_color_conversion
-}
-
-fn viewer_backend(gpu_acceleration_enabled: bool) -> effectcraft_engine::render::Backend {
-    if gpu_acceleration_enabled {
-        effectcraft_engine::render::Backend::Gpu
-    } else {
-        effectcraft_engine::render::Backend::Cpu
+    fn gpu_display_eligible(
+        channel: effectcraft_engine::viewer::Channel,
+        exposure_zero: bool,
+        has_roi: bool,
+        extended_view: bool,
+        needs_display_color_conversion: bool,
+    ) -> bool {
+        channel == effectcraft_engine::viewer::Channel::Rgb && exposure_zero && !has_roi && !extended_view && !needs_display_color_conversion
     }
-}
+
+    fn viewer_backend(gpu_acceleration_enabled: bool) -> effectcraft_engine::render::Backend {
+        if gpu_acceleration_enabled { effectcraft_engine::render::Backend::Gpu } else { effectcraft_engine::render::Backend::Cpu }
+    }
 
     /// Whether the viewer can draw the final RGB frame directly from its GPU texture without
     /// CPU pixel processing. On desktop, keep the existing CPU path when persistent disk caching
@@ -2322,15 +2314,12 @@ mod gpu_display_eligibility_tests {
     #[test]
     fn views_that_need_cpu_pixel_processing_keep_the_cpu_readback_path() {
         for channel in [Channel::Red, Channel::Green, Channel::Blue, Channel::Alpha, Channel::RgbStraight] {
-            assert!(!gpu_display_eligible(channel, true, false, false, false));
+            assert!(!EffectcraftApp::gpu_display_eligible(channel, true, false, false, false));
         }
         assert!(!EffectcraftApp::gpu_display_eligible(Channel::Rgb, false, false, false, false), "exposure needs CPU pixels");
         assert!(!EffectcraftApp::gpu_display_eligible(Channel::Rgb, true, true, false, false), "ROI display needs CPU pixels");
         assert!(!EffectcraftApp::gpu_display_eligible(Channel::Rgb, true, false, true, false), "extended view needs CPU pixels");
-        assert!(
-            !EffectcraftApp::gpu_display_eligible(Channel::Rgb, true, false, false, true),
-            "display color-management conversion must keep the CPU pixel path"
-        );
+        assert!(!EffectcraftApp::gpu_display_eligible(Channel::Rgb, true, false, false, true), "display color-management conversion must keep the CPU pixel path");
     }
 
     #[test]
@@ -2339,4 +2328,3 @@ mod gpu_display_eligibility_tests {
         assert_eq!(EffectcraftApp::viewer_backend(false), Backend::Cpu);
     }
 }
-
