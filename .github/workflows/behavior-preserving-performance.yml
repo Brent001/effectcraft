@@ -9,6 +9,8 @@ on:
       - "crates/ui-egui/**"
       - "crates/render/**"
       - "crates/media/**"
+      - "crates/engine/**"
+      - "apps/effectcraft/**"
       - ".github/workflows/behavior-preserving-performance.yml"
       - "Cargo.toml"
       - "Cargo.lock"
@@ -47,6 +49,19 @@ jobs:
         run: cargo test --locked -p effectcraft-gpu effects_without_parity_stay_on_cpu_until_proven
       - name: Verify integrated-GPU memory budgets
         run: cargo test --locked -p effectcraft-gpu memory_budget_tests
+
+  desktop-backend-recovery:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+      - name: Compile the desktop app backend selection and startup fallback
+        run: cargo check --locked -p effectcraft
+      - name: Test backend mapping and startup fallback transitions
+        run: cargo test --locked -p effectcraft --bin effectcraft launch_guard::tests
 
   preview-prefetch-regression:
     runs-on: ubuntu-latest
