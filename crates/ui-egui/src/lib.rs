@@ -316,7 +316,8 @@ pub struct EffectcraftApp {
     gpu_init_rx: Option<Receiver<Result<effectcraft_gpu::Gpu, String>>>,
     #[cfg(not(target_arch = "wasm32"))]
     gpu_init_render_state: Option<eframe::egui_wgpu::RenderState>,
-    /// When initialization started, used to keep a hung driver from remaining "initializing".
+    /// When initialization started. After the timeout warning, the worker is still polled so a
+    /// slow but successful initialization can enable the GPU later in the same session.
     #[cfg(not(target_arch = "wasm32"))]
     gpu_init_started: Option<std::time::Instant>,
     gpu_failures: Option<gpu_failure::GpuFailureBridge>,
@@ -874,13 +875,14 @@ impl EffectcraftApp {
 
         const GPU_INIT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
         if self.gpu_init_started.is_some_and(|started| started.elapsed() >= GPU_INIT_TIMEOUT) {
-            self.gpu_init_rx = None;
-            self.gpu_init_render_state = None;
+            // This is a warning threshold, not a hard cancellation: a slow shader compiler may
+            // still finish. Keep the receiver and render state so poll_gpu_init can adopt a late
+            // success without forcing a restart. Setting the timestamp to None ensures we report
+            // the slow initialization only once.
             self.gpu_init_started = None;
-            let reason = "GPU compositor initialization exceeded 30 seconds; CPU compositing remains active. Check Logs/effectcraft.log for GPU errors, or change Window Graphics and restart to retry.".to_string();
-            log::error!("{reason}");
+            let reason = "GPU compositor initialization is taking longer than 30 seconds; CPU compositing remains active while initialization continues. Check Logs/effectcraft.log for GPU errors. If it never becomes ready, change Window Graphics and restart to retry.".to_string();
+            log::warn!("{reason}");
             self.session.accel_note = Some(reason);
-            return;
         }
 
         let result = match self.gpu_init_rx.as_ref().map(|rx| rx.try_recv()) {
