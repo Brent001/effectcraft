@@ -7,6 +7,7 @@ on:
       - "apps/effectcraft/src/main.rs"
       - "apps/effectcraft/src/launch_guard.rs"
       - "crates/engine/src/prefs.rs"
+      - "crates/ui-egui/src/lib.rs"
       - "packaging/windows/package.ps1"
       - "packaging/windows/effectcraft.wxs"
       - ".github/workflows/windows-gpu-backend.yml"
