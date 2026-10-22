@@ -816,8 +816,11 @@ impl EffectcraftApp {
             let adapter = rs.adapter.clone();
             let device = rs.device.clone();
             let queue = rs.queue.clone();
+            let worker_label = format!("{} ({:?}, {:?})", info.name, info.backend, info.device_type);
             let (tx, rx) = std::sync::mpsc::channel();
             let worker = std::thread::Builder::new().name("effectcraft-gpu-init".into()).spawn(move || {
+                let worker_started = std::time::Instant::now();
+                log::info!("GPU compositor initialization worker: entering Gpu::new for {worker_label}");
                 let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| effectcraft_gpu::Gpu::new(&adapter, device, queue)))
                     .map_err(|payload| {
                         let reason = payload
@@ -828,6 +831,13 @@ impl EffectcraftApp {
                         format!("GPU compositor setup panicked: {reason}")
                     })
                     .and_then(|result| result);
+                match &result {
+                    Ok(_) => log::info!("GPU compositor initialization worker: Gpu::new succeeded in {:?}", worker_started.elapsed()),
+                    Err(error) => log::warn!(
+                        "GPU compositor initialization worker: Gpu::new failed after {:?}: {error}",
+                        worker_started.elapsed()
+                    ),
+                }
                 let _ = tx.send(result);
             });
             match worker {
