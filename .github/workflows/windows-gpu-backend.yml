@@ -60,5 +60,33 @@ jobs:
             $parseErrors | ForEach-Object { Write-Error $_.Message }
             exit 1
           }
+      - name: Verify pinned Microsoft DXC runtime archive
+        shell: pwsh
+        run: |
+          $version = '1.9.2609'
+          $archiveName = 'dxc_2026_09_29.zip'
+          $uri = "https://github.com/microsoft/DirectXShaderCompiler/releases/download/v$version/$archiveName"
+          $expectedSha256 = 'ad31b1fc8443175d204f77a611fdb3ef2ec42759bdc2f1167368de24a4a7e7f1'
+          $archivePath = Join-Path $env:RUNNER_TEMP $archiveName
+          Invoke-WebRequest -Uri $uri -OutFile $archivePath
+          $actualSha256 = (Get-FileHash -Path $archivePath -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actualSha256 -ne $expectedSha256) {
+            throw "DXC archive checksum mismatch: expected $expectedSha256, received $actualSha256"
+          }
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $zip = [System.IO.Compression.ZipFile]::OpenRead($archivePath)
+          try {
+            $entries = @($zip.Entries | ForEach-Object { $_.FullName })
+            foreach ($arch in @('x64', 'arm64')) {
+              foreach ($dll in @('dxcompiler.dll', 'dxil.dll')) {
+                $pattern = "(^|/)$arch/$dll$"
+                if (-not ($entries | Where-Object { $_ -match $pattern })) {
+                  throw "Official DXC archive is missing $arch/$dll"
+                }
+              }
+            }
+          } finally {
+            $zip.Dispose()
+          }
       - name: Compile the desktop application on Windows
         run: cargo check --locked -p effectcraft
