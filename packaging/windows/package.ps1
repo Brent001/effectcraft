@@ -90,6 +90,9 @@ Copy-Item (Join-Path $Bin 'effectcraft.exe'), (Join-Path $Bin 'effectcraft-cli.e
 
 # DXC is the maintained DX12 shader compiler. Pin Microsoft's official release and verify it
 # before extraction so packaging never silently ships a changed or partial download.
+# The official runtime is distributed for x64 and ARM64. x86 keeps wgpu's automatic compiler path.
+$IncludeDxc = $false
+if ($Arch -ne 'x86') {
 $DxcVersion = '1.9.2609'
 $DxcArchiveName = 'dxc_2026_09_29.zip'
 $DxcUri = "https://github.com/microsoft/DirectXShaderCompiler/releases/download/v$DxcVersion/$DxcArchiveName"
@@ -148,13 +151,17 @@ foreach ($license in $DxcLicenseFiles) {
   }
 }
 
+} else {
+  Write-Warning 'No bundled DXC runtime is provided for x86; wgpu automatic compiler selection remains enabled.'
+}
+
 & (Join-Path $PSScriptRoot 'sign.ps1') (Join-Path $Stage 'effectcraft.exe') (Join-Path $Stage 'effectcraft-cli.exe')
 
 # ---- MSI ---------------------------------------------------------------------------------------
 $Msi = Join-Path $Dist "effectcraft-$Version-windows-$Arch.msi"
 Invoke-Native 'wix build' {
   wix build (Join-Path $PSScriptRoot 'effectcraft.wxs') (Join-Path $PSScriptRoot 'installer-ui.wxs') -arch $Arch `
-    -d "Version=$MsiVersion" -d "BinDir=$Stage" -d "IconPath=$(Join-Path $Root 'assets\app-icon\effectcraft.ico')" `
+    -d "Version=$MsiVersion" -d "BinDir=$Stage" -d "IncludeDxc=$([int]$IncludeDxc)" -d "IconPath=$(Join-Path $Root 'assets\app-icon\effectcraft.ico')" `
     -o $Msi
 }
 # wix writes its debug symbols (.wixpdb) next to the MSI; keep them out of the release assets.
@@ -166,7 +173,9 @@ $Portable = Join-Path $TargetDir "windows-package\effectcraft-$Version-windows-$
 Remove-Item -Recurse -Force $Portable -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path $Portable | Out-Null
 Copy-Item (Join-Path $Stage '*.exe') $Portable
-Copy-Item (Join-Path $Stage 'dxcompiler.dll'), (Join-Path $Stage 'dxil.dll'), (Join-Path $Stage 'DirectXShaderCompiler-LICENSE.txt'), (Join-Path $Stage 'DirectXShaderCompiler-ThirdPartyNotices.txt') $Portable
+if ($IncludeDxc) {
+  Copy-Item (Join-Path $Stage 'dxcompiler.dll'), (Join-Path $Stage 'dxil.dll'), (Join-Path $Stage 'DirectXShaderCompiler-LICENSE.txt'), (Join-Path $Stage 'DirectXShaderCompiler-ThirdPartyNotices.txt') $Portable
+}
 foreach ($f in 'README.md', 'LICENSE', 'LICENSE-MIT', 'LICENSE-APACHE') {
   $p = Join-Path $Root $f
   if (Test-Path $p) { Copy-Item $p $Portable }
