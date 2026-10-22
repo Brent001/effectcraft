@@ -932,14 +932,14 @@ impl GpuContext {
     /// A bounded native readback: polling and receiving share one deadline.
     #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn read_buffer(&self, buffer: &wgpu::Buffer, row: usize, stride: usize, height: usize) -> Result<Vec<u8>, String> {
-        let deadline = web_time::Instant::now() + crate::readback::TIMEOUT;
+        let deadline = std::time::Instant::now() + crate::readback::TIMEOUT;
         let (tx, rx) = std::sync::mpsc::channel();
         self.map_readback(buffer, row, stride, height, move |r| {
             let _ = tx.send(r);
         });
         loop {
             self.readbacks.check()?;
-            let remaining = deadline.saturating_duration_since(web_time::Instant::now());
+            let remaining = deadline.saturating_duration_since(std::time::Instant::now());
             if remaining.is_zero() {
                 let error = "GPU readback receive timed out; context retired".to_string();
                 self.readbacks.retire(error.clone());
