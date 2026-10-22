@@ -150,6 +150,7 @@ foreach ($license in $DxcLicenseFiles) {
     Invoke-WebRequest -Uri $license.Url -OutFile $destination
   }
 }
+$IncludeDxc = $true
 
 } else {
   Write-Warning 'No bundled DXC runtime is provided for x86; wgpu automatic compiler selection remains enabled.'
