@@ -90,6 +90,16 @@
         <File Id="EffectcraftCliExe" Source="$(var.BinDir)\effectcraft-cli.exe" KeyPath="yes" />
       </Component>
 
+      <?if $(var.IncludeDxc) = 1 ?>
+      <!-- Bundled DXC avoids falling back to wgpu's slow legacy FXC compiler on Windows. -->
+      <Component Id="DxcRuntime">
+        <File Id="DxcCompilerDll" Source="$(var.BinDir)\dxcompiler.dll" KeyPath="yes" />
+        <File Id="DxcValidatorDll" Source="$(var.BinDir)\dxil.dll" />
+        <File Id="DxcLicenseTxt" Source="$(var.BinDir)\DirectXShaderCompiler-LICENSE.txt" />
+        <File Id="DxcThirdPartyNotices" Source="$(var.BinDir)\DirectXShaderCompiler-ThirdPartyNotices.txt" />
+      </Component>
+      <?endif ?>
+
       <!-- A component under the user's profile folders needs an HKCU key path (ICE38, ICE43). -->
       <Component Id="DesktopShortcut" Directory="DesktopFolder" Condition="DESKTOPSHORTCUT = &quot;1&quot;">
         <Shortcut Id="DesktopShortcut" Name="EffectCraft" Description="EffectCraft motion graphics and visual effects"

@@ -389,6 +389,24 @@ fn wgpu_options(backends: Option<eframe::wgpu::Backends>) -> eframe::WgpuConfigu
             required_limits: device_limits(adapter.limits()),
             ..Default::default()
         });
+        // If DXC is not otherwise available, wgpu can fall back to legacy FXC, which can
+        // compile these compute kernels slowly on older integrated GPUs. Windows packages ship DXC.
+        // with_env() deliberately preserves an explicit WGPU_DX12_COMPILER override.
+        #[cfg(target_os = "windows")]
+        {
+            let bundled_dxc = std::env::current_exe().ok().and_then(|exe| exe.parent().map(|dir| dir.join("dxcompiler.dll"))).filter(|path| path.is_file());
+            let shader_compiler = match bundled_dxc {
+                Some(path) => {
+                    log::info!("DX12 shader compiler: bundled DXC at {}", path.display());
+                    eframe::wgpu::Dx12Compiler::DynamicDxc { dxc_path: path.to_string_lossy().into_owned() }
+                }
+                None => {
+                    log::warn!("DX12 shader compiler: bundled dxcompiler.dll not found; using wgpu automatic compiler selection");
+                    eframe::wgpu::Dx12Compiler::Auto
+                }
+            };
+            setup.instance_descriptor.backend_options.dx12.shader_compiler = shader_compiler.with_env();
+        }
     }
     config
 }

@@ -7,6 +7,9 @@ on:
       - "apps/effectcraft/src/main.rs"
       - "apps/effectcraft/src/launch_guard.rs"
       - "crates/engine/src/prefs.rs"
+      - "crates/ui-egui/src/lib.rs"
+      - "packaging/windows/package.ps1"
+      - "packaging/windows/effectcraft.wxs"
       - ".github/workflows/windows-gpu-backend.yml"
   workflow_dispatch:
 
@@ -37,3 +40,52 @@ jobs:
         run: cargo check --locked -p effectcraft
       - name: Test backend selection and crash recovery
         run: cargo test --locked -p effectcraft --bin effectcraft launch_guard::tests
+
+  windows-dx12-compile:
+    name: Compile Windows DX12 setup and verify packaging script
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+      - name: Check Windows packaging script syntax
+        shell: pwsh
+        run: |
+          $scriptPath = Join-Path $env:GITHUB_WORKSPACE 'packaging/windows/package.ps1'
+          $tokens = $null
+          $parseErrors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile($scriptPath, [ref]$tokens, [ref]$parseErrors) | Out-Null
+          if ($parseErrors.Count -gt 0) {
+            $parseErrors | ForEach-Object { Write-Error $_.Message }
+            exit 1
+          }
+      - name: Verify pinned Microsoft DXC runtime archive
+        shell: pwsh
+        run: |
+          $version = '1.9.2609'
+          $archiveName = 'dxc_2026_09_29.zip'
+          $uri = "https://github.com/microsoft/DirectXShaderCompiler/releases/download/v$version/$archiveName"
+          $expectedSha256 = 'ad31b1fc8443175d204f77a611fdb3ef2ec42759bdc2f1167368de24a4a7e7f1'
+          $archivePath = Join-Path $env:RUNNER_TEMP $archiveName
+          Invoke-WebRequest -Uri $uri -OutFile $archivePath
+          $actualSha256 = (Get-FileHash -Path $archivePath -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actualSha256 -ne $expectedSha256) {
+            throw "DXC archive checksum mismatch: expected $expectedSha256, received $actualSha256"
+          }
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $zip = [System.IO.Compression.ZipFile]::OpenRead($archivePath)
+          try {
+            $entries = @($zip.Entries | ForEach-Object { $_.FullName -replace '\\', '/' })
+            $compilers = @($entries | Where-Object { $_ -match '(?i)dxcompiler\.dll$' })
+            $validators = @($entries | Where-Object { $_ -match '(?i)dxil\.dll$' })
+            Write-Output "DXC compiler DLL paths: $($compilers -join ', ')"
+            Write-Output "DXIL validator DLL paths: $($validators -join ', ')"
+            if ($compilers.Count -eq 0) { throw 'Official DXC archive is missing dxcompiler.dll' }
+            if ($validators.Count -eq 0) { throw 'Official DXC archive is missing dxil.dll' }
+          } finally {
+            $zip.Dispose()
+          }
+      - name: Compile the desktop application on Windows
+        run: cargo check --locked -p effectcraft

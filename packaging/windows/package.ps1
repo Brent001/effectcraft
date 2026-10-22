@@ -88,13 +88,83 @@ Remove-Item -Recurse -Force $Stage -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path $Stage | Out-Null
 Copy-Item (Join-Path $Bin 'effectcraft.exe'), (Join-Path $Bin 'effectcraft-cli.exe') $Stage
 
+# DXC is the maintained DX12 shader compiler. Pin Microsoft's official release and verify it
+# before extraction so packaging never silently ships a changed or partial download.
+# The official runtime is distributed for x64 and ARM64. x86 keeps wgpu's automatic compiler path.
+$IncludeDxc = $false
+if ($Arch -ne 'x86') {
+$DxcVersion = '1.9.2609'
+$DxcArchiveName = 'dxc_2026_09_29.zip'
+$DxcUri = "https://github.com/microsoft/DirectXShaderCompiler/releases/download/v$DxcVersion/$DxcArchiveName"
+$DxcSha256 = 'ad31b1fc8443175d204f77a611fdb3ef2ec42759bdc2f1167368de24a4a7e7f1'
+New-Item -ItemType Directory -Force -Path $TargetDir | Out-Null
+$DxcArchive = Join-Path $TargetDir $DxcArchiveName
+if (Test-Path -LiteralPath $DxcArchive) {
+  $existingHash = (Get-FileHash -Path $DxcArchive -Algorithm SHA256).Hash.ToLowerInvariant()
+  if ($existingHash -ne $DxcSha256) {
+    Remove-Item -Force $DxcArchive
+  }
+}
+if (-not (Test-Path -LiteralPath $DxcArchive)) {
+  Write-Output "Downloading Microsoft's DXC $DxcVersion runtime"
+  Invoke-WebRequest -Uri $DxcUri -OutFile $DxcArchive
+}
+$actualHash = (Get-FileHash -Path $DxcArchive -Algorithm SHA256).Hash.ToLowerInvariant()
+if ($actualHash -ne $DxcSha256) {
+  Remove-Item -Force $DxcArchive -ErrorAction SilentlyContinue
+  throw "DXC archive SHA-256 mismatch: expected $DxcSha256, received $actualHash"
+}
+
+$DxcExtract = Join-Path $TargetDir "dxc-$DxcVersion"
+Remove-Item -Recurse -Force $DxcExtract -ErrorAction SilentlyContinue
+Expand-Archive -Path $DxcArchive -DestinationPath $DxcExtract -Force
+# Don't assume Microsoft's ZIP uses a particular directory naming scheme; select the native
+# binaries by their PE machine type so renamed/reshuffled folders cannot select the wrong DLL.
+$DxcCompiler = Get-ChildItem -Path $DxcExtract -Recurse -File -Filter 'dxcompiler.dll' |
+  Where-Object { (Get-PeHeader $_.FullName).Machine -eq $Machine } | Select-Object -First 1
+if (-not $DxcCompiler) { throw "Official DXC $DxcVersion has no dxcompiler.dll for Windows $Arch (PE machine 0x$('{0:X}' -f $Machine))" }
+$DxcValidator = Get-ChildItem -Path $DxcExtract -Recurse -File -Filter 'dxil.dll' |
+  Where-Object { (Get-PeHeader $_.FullName).Machine -eq $Machine } | Select-Object -First 1
+if (-not $DxcValidator) { throw "Official DXC $DxcVersion has no dxil.dll for Windows $Arch (PE machine 0x$('{0:X}' -f $Machine))" }
+Copy-Item $DxcCompiler.FullName (Join-Path $Stage 'dxcompiler.dll')
+Copy-Item $DxcValidator.FullName (Join-Path $Stage 'dxil.dll')
+
+# Ship the DXC license and third-party notices in both the MSI and portable distribution.
+$DxcLicenseFiles = @(
+  @{
+    SourceName = 'LICENSE.TXT'
+    OutputName = 'DirectXShaderCompiler-LICENSE.txt'
+    Url = "https://raw.githubusercontent.com/microsoft/DirectXShaderCompiler/v$DxcVersion/LICENSE.TXT"
+  },
+  @{
+    SourceName = 'ThirdPartyNotices.txt'
+    OutputName = 'DirectXShaderCompiler-ThirdPartyNotices.txt'
+    Url = "https://raw.githubusercontent.com/microsoft/DirectXShaderCompiler/v$DxcVersion/ThirdPartyNotices.txt"
+  }
+)
+foreach ($license in $DxcLicenseFiles) {
+  $source = Get-ChildItem -Path $DxcExtract -Recurse -File -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -ieq $license.SourceName } | Select-Object -First 1
+  $destination = Join-Path $Stage $license.OutputName
+  if ($source) {
+    Copy-Item $source.FullName $destination
+  } else {
+    Invoke-WebRequest -Uri $license.Url -OutFile $destination
+  }
+}
+$IncludeDxc = $true
+
+} else {
+  Write-Warning 'No bundled DXC runtime is provided for x86; wgpu automatic compiler selection remains enabled.'
+}
+
 & (Join-Path $PSScriptRoot 'sign.ps1') (Join-Path $Stage 'effectcraft.exe') (Join-Path $Stage 'effectcraft-cli.exe')
 
 # ---- MSI ---------------------------------------------------------------------------------------
 $Msi = Join-Path $Dist "effectcraft-$Version-windows-$Arch.msi"
 Invoke-Native 'wix build' {
   wix build (Join-Path $PSScriptRoot 'effectcraft.wxs') (Join-Path $PSScriptRoot 'installer-ui.wxs') -arch $Arch `
-    -d "Version=$MsiVersion" -d "BinDir=$Stage" -d "IconPath=$(Join-Path $Root 'assets\app-icon\effectcraft.ico')" `
+    -d "Version=$MsiVersion" -d "BinDir=$Stage" -d "IncludeDxc=$([int]$IncludeDxc)" -d "IconPath=$(Join-Path $Root 'assets\app-icon\effectcraft.ico')" `
     -o $Msi
 }
 # wix writes its debug symbols (.wixpdb) next to the MSI; keep them out of the release assets.
@@ -106,6 +176,9 @@ $Portable = Join-Path $TargetDir "windows-package\effectcraft-$Version-windows-$
 Remove-Item -Recurse -Force $Portable -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path $Portable | Out-Null
 Copy-Item (Join-Path $Stage '*.exe') $Portable
+if ($IncludeDxc) {
+  Copy-Item (Join-Path $Stage 'dxcompiler.dll'), (Join-Path $Stage 'dxil.dll'), (Join-Path $Stage 'DirectXShaderCompiler-LICENSE.txt'), (Join-Path $Stage 'DirectXShaderCompiler-ThirdPartyNotices.txt') $Portable
+}
 foreach ($f in 'README.md', 'LICENSE', 'LICENSE-MIT', 'LICENSE-APACHE') {
   $p = Join-Path $Root $f
   if (Test-Path $p) { Copy-Item $p $Portable }
