@@ -394,10 +394,7 @@ fn wgpu_options(backends: Option<eframe::wgpu::Backends>) -> eframe::WgpuConfigu
         // with_env() deliberately preserves an explicit WGPU_DX12_COMPILER override.
         #[cfg(target_os = "windows")]
         {
-            let bundled_dxc = std::env::current_exe()
-                .ok()
-                .and_then(|exe| exe.parent().map(|dir| dir.join("dxcompiler.dll")))
-                .filter(|path| path.is_file());
+            let bundled_dxc = std::env::current_exe().ok().and_then(|exe| exe.parent().map(|dir| dir.join("dxcompiler.dll"))).filter(|path| path.is_file());
             let shader_compiler = match bundled_dxc {
                 Some(path) => {
                     log::info!("DX12 shader compiler: bundled DXC at {}", path.display());
