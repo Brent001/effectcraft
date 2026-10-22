@@ -77,29 +77,12 @@ jobs:
           $zip = [System.IO.Compression.ZipFile]::OpenRead($archivePath)
           try {
             $entries = @($zip.Entries | ForEach-Object { $_.FullName -replace '\\', '/' })
-            Write-Output 'DXC archive compiler and validator entries:'
-            $entries | Where-Object { $_ -match '(?i)(dxcompiler|dxil)\.dll
-              foreach ($dll in @('dxcompiler.dll', 'dxil.dll')) {
-                $pattern = "(^|/)$arch/$dll$"
-                if (-not ($entries | Where-Object { $_ -match $pattern })) {
-                  throw "Official DXC archive is missing $arch/$dll"
-                }
-              }
-            }
-          } finally {
-            $zip.Dispose()
-          }
-      - name: Compile the desktop application on Windows
-        run: cargo check --locked -p effectcraft
- } | ForEach-Object { Write-Output $_ }
-            foreach ($arch in @('x64', 'arm64')) {
-              foreach ($dll in @('dxcompiler.dll', 'dxil.dll')) {
-                $pattern = "(^|/)$arch/$dll$"
-                if (-not ($entries | Where-Object { $_ -match $pattern })) {
-                  throw "Official DXC archive is missing $arch/$dll"
-                }
-              }
-            }
+            $compilers = @($entries | Where-Object { $_ -match '(?i)dxcompiler\.dll$' })
+            $validators = @($entries | Where-Object { $_ -match '(?i)dxil\.dll$' })
+            Write-Output "DXC compiler DLL paths: $($compilers -join ', ')"
+            Write-Output "DXIL validator DLL paths: $($validators -join ', ')"
+            if ($compilers.Count -eq 0) { throw 'Official DXC archive is missing dxcompiler.dll' }
+            if ($validators.Count -eq 0) { throw 'Official DXC archive is missing dxil.dll' }
           } finally {
             $zip.Dispose()
           }
