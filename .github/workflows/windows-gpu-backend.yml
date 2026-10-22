@@ -7,6 +7,8 @@ on:
       - "apps/effectcraft/src/main.rs"
       - "apps/effectcraft/src/launch_guard.rs"
       - "crates/engine/src/prefs.rs"
+      - "packaging/windows/package.ps1"
+      - "packaging/windows/effectcraft.wxs"
       - ".github/workflows/windows-gpu-backend.yml"
   workflow_dispatch:
 
@@ -37,3 +39,26 @@ jobs:
         run: cargo check --locked -p effectcraft
       - name: Test backend selection and crash recovery
         run: cargo test --locked -p effectcraft --bin effectcraft launch_guard::tests
+
+  windows-dx12-compile:
+    name: Compile Windows DX12 setup and verify packaging script
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+      - name: Check Windows packaging script syntax
+        shell: pwsh
+        run: |
+          $scriptPath = Join-Path $env:GITHUB_WORKSPACE 'packaging/windows/package.ps1'
+          $tokens = $null
+          $parseErrors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile($scriptPath, [ref]$tokens, [ref]$parseErrors) | Out-Null
+          if ($parseErrors.Count -gt 0) {
+            $parseErrors | ForEach-Object { Write-Error $_.Message }
+            exit 1
+          }
+      - name: Compile the desktop application on Windows
+        run: cargo check --locked -p effectcraft
