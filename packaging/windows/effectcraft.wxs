@@ -91,12 +91,18 @@
       </Component>
 
       <?if $(var.IncludeDxc) = 1 ?>
-      <!-- Bundled DXC avoids falling back to wgpu's slow legacy FXC compiler on Windows. -->
-      <Component Id="DxcRuntime">
+      <!-- Keep each DXC file in its own component so WiX can safely auto-generate component GUIDs. -->
+      <Component Id="DxcCompilerRuntime">
         <File Id="DxcCompilerDll" Source="$(var.BinDir)\dxcompiler.dll" KeyPath="yes" />
-        <File Id="DxcValidatorDll" Source="$(var.BinDir)\dxil.dll" />
-        <File Id="DxcLicenseTxt" Source="$(var.BinDir)\DirectXShaderCompiler-LICENSE.txt" />
-        <File Id="DxcThirdPartyNotices" Source="$(var.BinDir)\DirectXShaderCompiler-ThirdPartyNotices.txt" />
+      </Component>
+      <Component Id="DxcValidatorRuntime">
+        <File Id="DxcValidatorDll" Source="$(var.BinDir)\dxil.dll" KeyPath="yes" />
+      </Component>
+      <Component Id="DxcLicense">
+        <File Id="DxcLicenseTxt" Source="$(var.BinDir)\DirectXShaderCompiler-LICENSE.txt" KeyPath="yes" />
+      </Component>
+      <Component Id="DxcThirdPartyNotices">
+        <File Id="DxcThirdPartyNoticesFile" Source="$(var.BinDir)\DirectXShaderCompiler-ThirdPartyNotices.txt" KeyPath="yes" />
       </Component>
       <?endif ?>
 
