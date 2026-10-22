@@ -118,12 +118,14 @@ if ($actualHash -ne $DxcSha256) {
 $DxcExtract = Join-Path $TargetDir "dxc-$DxcVersion"
 Remove-Item -Recurse -Force $DxcExtract -ErrorAction SilentlyContinue
 Expand-Archive -Path $DxcArchive -DestinationPath $DxcExtract -Force
-$DxcArch = $Arch
+# Don't assume Microsoft's ZIP uses a particular directory naming scheme; select the native
+# binaries by their PE machine type so renamed/reshuffled folders cannot select the wrong DLL.
 $DxcCompiler = Get-ChildItem -Path $DxcExtract -Recurse -File -Filter 'dxcompiler.dll' |
-  Where-Object { $_.Directory.Name -ieq $DxcArch } | Select-Object -First 1
-if (-not $DxcCompiler) { throw "Official DXC $DxcVersion has no dxcompiler.dll for Windows $Arch" }
-$DxcValidator = Get-ChildItem -Path $DxcCompiler.Directory.FullName -File -Filter 'dxil.dll' | Select-Object -First 1
-if (-not $DxcValidator) { throw "Official DXC $DxcVersion has no dxil.dll beside the $Arch compiler" }
+  Where-Object { (Get-PeHeader $_.FullName).Machine -eq $Machine } | Select-Object -First 1
+if (-not $DxcCompiler) { throw "Official DXC $DxcVersion has no dxcompiler.dll for Windows $Arch (PE machine 0x$('{0:X}' -f $Machine))" }
+$DxcValidator = Get-ChildItem -Path $DxcExtract -Recurse -File -Filter 'dxil.dll' |
+  Where-Object { (Get-PeHeader $_.FullName).Machine -eq $Machine } | Select-Object -First 1
+if (-not $DxcValidator) { throw "Official DXC $DxcVersion has no dxil.dll for Windows $Arch (PE machine 0x$('{0:X}' -f $Machine))" }
 Copy-Item $DxcCompiler.FullName (Join-Path $Stage 'dxcompiler.dll')
 Copy-Item $DxcValidator.FullName (Join-Path $Stage 'dxil.dll')
 
