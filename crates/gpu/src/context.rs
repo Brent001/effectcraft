@@ -597,7 +597,7 @@ impl GpuContext {
     /// Preserves the host's device handlers. The host must forward failures using
     /// [`Self::device_failure_notifier`] for immediate readback cancellation.
     pub fn new(adapter: &wgpu::Adapter, device: wgpu::Device, queue: wgpu::Queue) -> Result<GpuContext, String> {
-        let init_started = std::time::Instant::now();
+        let init_started = web_time::Instant::now();
         let info = adapter.get_info();
         log::info!(
             "gpu init: starting compositor context for {} ({:?}, {:?}; driver={} {})",
@@ -654,7 +654,7 @@ impl GpuContext {
             log::info!("gpu {name}: Advanced 3D renders on the CPU ({why})");
         }
         log::info!("gpu init: compiling core WGSL shader module");
-        let stage_started = std::time::Instant::now();
+        let stage_started = web_time::Instant::now();
         let module = kernel_module(&device, "effectcraft kernels", &[])?;
         log::info!("gpu init: core WGSL shader module ready in {:?}", stage_started.elapsed());
         log::info!("gpu init: creating core bind-group and pipeline layouts");
@@ -714,24 +714,24 @@ impl GpuContext {
 
         // Keep core compositor kernels ready; load effect-specific shader modules/pipelines lazily.
         log::info!("gpu init: compiling sky shader module");
-        let stage_started = std::time::Instant::now();
+        let stage_started = web_time::Instant::now();
         let sky = kernel_module(&device, "effectcraft sky", &[include_str!("shaders/sky.wgsl")])?;
         log::info!("gpu init: sky shader module ready in {:?}", stage_started.elapsed());
         log::info!("gpu init: compiling Classic 3D shader module");
-        let stage_started = std::time::Instant::now();
+        let stage_started = web_time::Instant::now();
         let classic3d = kernel_module(&device, "effectcraft classic3d", &[include_str!("shaders/classic3d.wgsl")])?;
         log::info!("gpu init: Classic 3D shader module ready in {:?}", stage_started.elapsed());
 
         let mut pipelines = HashMap::new();
         for entry in ENTRIES.iter().copied() {
-            let stage_started = std::time::Instant::now();
+            let stage_started = web_time::Instant::now();
             log::info!("gpu init: compiling core compute pipeline '{entry}'");
             let pipeline = build_pipeline(&device, &module, &layout, entry)?;
             log::info!("gpu init: core compute pipeline '{entry}' ready in {:?}", stage_started.elapsed());
             pipelines.insert(entry, pipeline);
         }
         for entry in crate::adv3d::SKY_KERNELS.iter().copied() {
-            let stage_started = std::time::Instant::now();
+            let stage_started = web_time::Instant::now();
             log::info!("gpu init: compiling sky compute pipeline '{entry}'");
             let pipeline = build_pipeline(&device, &sky, &layout, entry)?;
             log::info!("gpu init: sky compute pipeline '{entry}' ready in {:?}", stage_started.elapsed());
@@ -742,7 +742,7 @@ impl GpuContext {
         // whose shader compiler rejects it.
         let mut unavailable = Vec::new();
         for entry in EXT_ENTRIES {
-            let stage_started = std::time::Instant::now();
+            let stage_started = web_time::Instant::now();
             log::info!("gpu init: compiling optional Classic 3D pipeline '{entry}'");
             match build_pipeline(&device, &classic3d, &layout_ext, entry) {
                 Ok(pipeline) => {
@@ -764,7 +764,7 @@ impl GpuContext {
         let modules = std::iter::once(std::sync::OnceLock::from(Ok(module))).chain(FAMILIES.iter().skip(1).map(|_| std::sync::OnceLock::new())).collect();
 
         log::info!("gpu init: compiling display WGSL shader module");
-        let stage_started = std::time::Instant::now();
+        let stage_started = web_time::Instant::now();
         let dmodule = init_resource(&device, "display shader module", || {
             device.create_shader_module(wgpu::ShaderModuleDescriptor {
                 label: Some("effectcraft display"),
@@ -786,7 +786,7 @@ impl GpuContext {
             })
         })?;
         let display_pipeline = |entry: &'static str| {
-            let stage_started = std::time::Instant::now();
+            let stage_started = web_time::Instant::now();
             log::info!("gpu init: compiling display compute pipeline '{entry}'");
             let result = init_resource(&device, "display compute pipeline", || {
                 device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
@@ -932,14 +932,14 @@ impl GpuContext {
     /// A bounded native readback: polling and receiving share one deadline.
     #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn read_buffer(&self, buffer: &wgpu::Buffer, row: usize, stride: usize, height: usize) -> Result<Vec<u8>, String> {
-        let deadline = std::time::Instant::now() + crate::readback::TIMEOUT;
+        let deadline = web_time::Instant::now() + crate::readback::TIMEOUT;
         let (tx, rx) = std::sync::mpsc::channel();
         self.map_readback(buffer, row, stride, height, move |r| {
             let _ = tx.send(r);
         });
         loop {
             self.readbacks.check()?;
-            let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+            let remaining = deadline.saturating_duration_since(web_time::Instant::now());
             if remaining.is_zero() {
                 let error = "GPU readback receive timed out; context retired".to_string();
                 self.readbacks.retire(error.clone());
