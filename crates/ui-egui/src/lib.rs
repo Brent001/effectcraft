@@ -880,7 +880,12 @@ impl EffectcraftApp {
             // success without forcing a restart. Setting the timestamp to None ensures we report
             // the slow initialization only once.
             self.gpu_init_started = None;
-            let reason = "GPU compositor initialization is taking longer than 30 seconds; CPU compositing remains active while initialization continues. Check Logs/effectcraft.log for GPU errors. If it never becomes ready, change Window Graphics and restart to retry.".to_string();
+            let reason = concat!(
+                "GPU compositor initialization is taking longer than 30 seconds; CPU compositing remains ",
+                "active while initialization continues. Check Logs/effectcraft.log for GPU errors. If it ",
+                "never becomes ready, change Window Graphics and restart to retry."
+            )
+            .to_string();
             log::warn!("{reason}");
             self.session.accel_note = Some(reason);
         }
