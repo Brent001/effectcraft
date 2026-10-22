@@ -389,8 +389,8 @@ fn wgpu_options(backends: Option<eframe::wgpu::Backends>) -> eframe::WgpuConfigu
             required_limits: device_limits(adapter.limits()),
             ..Default::default()
         });
-        // FXC is wgpu's legacy default and can compile these compute kernels very slowly on
-        // older integrated GPUs. Windows packages ship the matching DXC runtime beside the EXE.
+        // If DXC is not otherwise available, wgpu can fall back to legacy FXC, which can
+        // compile these compute kernels slowly on older integrated GPUs. Windows packages ship DXC.
         // with_env() deliberately preserves an explicit WGPU_DX12_COMPILER override.
         #[cfg(target_os = "windows")]
         {
