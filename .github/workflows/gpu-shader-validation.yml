@@ -1,0 +1,39 @@
+name: GPU shader source validation
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/gpu-shader-validation.yml"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "crates/gpu/**"
+  push:
+    branches: [main, release, release/community-downloads]
+    paths:
+      - ".github/workflows/gpu-shader-validation.yml"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "crates/gpu/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gpu-shader-validation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate-shaders:
+    name: Validate all WGSL without a GPU
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          key: gpu-shader-validation
+      - name: Parse and validate every GPU shader family
+        run: cargo test --locked -p effectcraft-gpu all_gpu_shader_families_validate_without_a_physical_gpu -- --nocapture
