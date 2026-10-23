@@ -126,6 +126,11 @@ page!(General {
 page!(Startup {
     show_home_on_launch: bool = true,
     show_home_on_open_project: bool = false,
+    /// Start the localhost agent control server automatically on the next launch.
+    /// It is opt-in; command-line --control and EFFECTCRAFT_CONTROL_PORT still override this.
+    control_server_enabled: bool = false,
+    /// Loopback TCP port for the desktop control / MCP bridge.
+    control_server_port: u16 = 9875,
     /// After a crash, offer to open the most recent auto-save.
     offer_crash_recovery: bool = true,
     /// Window rendering API from the next launch. Windows can explicitly select DX12, Vulkan, or
@@ -612,6 +617,7 @@ impl Prefs {
         if !is_choice(WINDOW_GRAPHICS, &self.startup.window_graphics) {
             self.startup.window_graphics = Startup::default().window_graphics;
         }
+        self.startup.control_server_port = self.startup.control_server_port.clamp(1, u16::MAX);
         let g = &mut self.general;
         if !is_choice(LANGUAGES, &g.language) {
             g.language = General::default().language;
@@ -1194,6 +1200,12 @@ pub fn pages() -> Vec<Page> {
             items: vec![
                 s("startup.showHomeOnLaunch", "Show Home Screen When Launching", B, true),
                 s("startup.showHomeOnOpenProject", "Show Home Screen When Opening a Project", B, true),
+                Section("Agent / MCP Control Server"),
+                s("startup.controlServerEnabled", "Enable MCP / Control Server on Startup", B, true),
+                s("startup.controlServerPort", "MCP / Control Server Port", Kind::Int(1, 65535, "port"), true),
+                Note(
+                    "When enabled, EffectCraft starts its loopback-only agent control server on the next launch. It listens only on 127.0.0.1; command-line --control and EFFECTCRAFT_CONTROL_PORT override these settings.",
+                ),
                 s("startup.offerCrashRecovery", "Offer to Open the Latest Auto-Save After a Crash", B, true),
                 s("startup.windowGraphics", "Window Graphics", Kind::Choice(WINDOW_GRAPHICS), true),
                 Note(

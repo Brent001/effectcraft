@@ -38,6 +38,8 @@ Commands (CLI, MCP, control channel):
 - `general.createLayersAtCompStart`: Create Layers at Composition Start Time
 - `general.defaultSpatialLinear`: Default Spatial Interpolation to Linear
 - `startup.showHomeOnLaunch`: Show Home Screen When Launching
+- `startup.controlServerEnabled`: Enable MCP / Control Server on Startup (off by default). When enabled, the desktop app starts its JSON-lines control server on the next launch, listening only on `127.0.0.1`; no terminal command or executable path is needed. The default port is `9875`.
+- `startup.controlServerPort`: MCP / Control Server Port (1–65535, default `9875`). The setting applies on the next launch. An explicit `--control <port>` or `EFFECTCRAFT_CONTROL_PORT` takes precedence over the saved autostart port.
 - `startup.offerCrashRecovery`: Offer to Open the Latest Auto-Save After a Crash
 - `startup.windowGraphics`: Window Graphics, applied on the next launch. On Windows choose `auto`, `dx12`, `vulkan`, or `gl`; Linux offers `auto`, `vulkan`, or `gl`; macOS uses its Metal-backed automatic choice. OpenGL can draw the UI but EffectCraft's compute compositor deliberately rejects the GL backend, so rendering effects falls back to the CPU in compatibility mode. A `launch-pending` marker detects driver crashes while the window starts: Windows tries Vulkan before OpenGL compatibility; Vulkan then falls back to OpenGL, and OpenGL returns to Automatic to prevent a retry loop. `WGPU_BACKEND` overrides the saved choice.
 - `project.useTemplate`: New Project Loads Template

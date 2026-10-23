@@ -122,6 +122,16 @@ fn control_port(name: &str, value: Option<&str>) -> Result<u16, String> {
     }
 }
 
+/// Resolve the agent control port for desktop startup. Explicit CLI/environment settings win;
+/// otherwise the saved opt-in preference controls whether the listener starts.
+fn startup_control_port(explicit_port: Option<u16>, prefs_json: Option<&str>) -> Option<u16> {
+    if explicit_port.is_some() {
+        return explicit_port;
+    }
+    let prefs = effectcraft_engine::prefs::Prefs::from_json(prefs_json?);
+    prefs.startup.control_server_enabled.then_some(prefs.startup.control_server_port)
+}
+
 /// The commands' file dialogs open without blocking the frame where the host's backend would:
 /// on macOS as sheets instead of nested modal loops (#511), on Linux through the desktop
 /// portal from a worker thread — a blocking portal dialog leaves the main thread waiting on its
@@ -144,7 +154,8 @@ fn main() -> eframe::Result {
     // feed the compatibility report.
     effectcraft_engine::logging::install();
     effectcraft_engine::logging::install_panic_hook();
-    let Args { control_port, files, demo, home } = match parse_args(std::env::args().skip(1), std::env::var("EFFECTCRAFT_CONTROL_PORT")) {
+    let Args { control_port: explicit_control_port, files, demo, home } = match parse_args(std::env::args().skip(1), std::env::var("EFFECTCRAFT_CONTROL_PORT"))
+    {
         Ok(Some(args)) => args,
         Ok(None) => {
             println!("effectcraft {}", env!("CARGO_PKG_VERSION"));
@@ -156,10 +167,20 @@ fn main() -> eframe::Result {
             std::process::exit(1);
         }
     };
+    // Read the persisted startup preference before creating the window: with the opt-in enabled,
+    // the window uses the same agent-friendly launch behavior as an explicit --control invocation.
+    // config_dir resolves regular and portable installs on every supported desktop platform.
+    let config_dir = effectcraft_host::config_dir();
+    let saved_prefs = config_dir.as_deref().and_then(|dir| std::fs::read_to_string(dir.join(effectcraft_engine::prefs::PREFS_FILE)).ok());
+    let control_port = startup_control_port(explicit_control_port, saved_prefs.as_deref());
+    // Only an explicit CLI/environment launch is agent-driven. A listener started from Settings
+    // must leave the desktop's normal focus, Home screen and recovery behavior unchanged.
+    let agent_mode = explicit_control_port.is_some();
+
     // The session log lives in the settings folder (`Logs/effectcraft.log`, the previous two runs
     // kept): a launch from the Dock or a menu has no terminal. Opened after the arguments, so
     // `--version` leaves no file behind; records logged until now are written to it first.
-    if let Some(dir) = effectcraft_host::config_dir() {
+    if let Some(dir) = config_dir.as_deref() {
         match effectcraft_engine::logging::attach_session_log(&effectcraft_engine::logging::log_dir(Some(&dir))) {
             Ok(path) => log::info!("effectcraft {}, log file {}", env!("CARGO_PKG_VERSION"), path.display()),
             Err(e) => log::warn!("no log file: {e}"),
@@ -183,11 +204,11 @@ fn main() -> eframe::Result {
             .with_min_inner_size(window::MIN_SIZE)
             .with_drag_and_drop(true)
             // Started for an agent (`--control`): open without taking the user's keyboard focus.
-            .with_active(control_port.is_none())
+            .with_active(!agent_mode)
             .with_icon(app_icon())
             // Wayland matches the window to `ai.storyteller.effectcraft.desktop` by this ID.
             .with_app_id(appimage::APP_ID),
-        event_loop_builder: agent_event_loop(control_port.is_some()),
+        event_loop_builder: agent_event_loop(agent_mode),
         wgpu_options: wgpu_options(launch.backends),
         ..Default::default()
     };
@@ -244,7 +265,7 @@ fn main() -> eframe::Result {
             // Fit the window to its monitor, or put it back where it was (still hidden).
             let saved_window = session.config.as_deref().and_then(window::load);
             let opened = cc.winit_window().map(|w| window::restore(w, saved_window));
-            let recovery = if control_port.is_none() { session.begin_recovery() } else { None };
+            let recovery = if !agent_mode { session.begin_recovery() } else { None };
             let project = files.iter().find(|f| is_project_file(f)).cloned();
             if let Some(p) = project {
                 if let Err(e) = session.execute("file.open", json!({"path": p})) {
@@ -259,7 +280,7 @@ fn main() -> eframe::Result {
             {
                 log::warn!("import: {e}");
             }
-            let show_home = home.unwrap_or(session.prefs.startup.show_home_on_launch && files.is_empty() && control_port.is_none());
+            let show_home = home.unwrap_or(session.prefs.startup.show_home_on_launch && files.is_empty() && !agent_mode);
             // The ScriptUI panels open when the app last quit open again (a failing one is
             // reported in a toast and forgotten).
             let _ = session.execute("window.restoreScriptPanels", json!({}));
@@ -286,7 +307,7 @@ fn main() -> eframe::Result {
             }));
             // The window closes after a lost graphics device (#591); say why, unless an agent drives
             // the app through the control channel.
-            if control_port.is_none() {
+            if !agent_mode {
                 app.hooks.device_lost = Some(Box::new(|saved: Option<Result<String, String>>| {
                     let saved = match saved {
                         Some(Ok(path)) => format!("\n\nYour unsaved changes were saved to:\n{path}\n\nReopen EffectCraft to recover them."),
@@ -327,9 +348,19 @@ fn main() -> eframe::Result {
                 app.hooks.clipboard_text = Some(Box::new(native_menu::clipboard_text));
             }
             if let Some(port) = control_port {
-                disable_app_nap();
-                let rx = control_server::start(port, cc.egui_ctx.clone());
-                app = app.with_control(rx);
+                match control_server::start(port, cc.egui_ctx.clone()) {
+                    Ok(rx) => {
+                        disable_app_nap();
+                        log::info!("MCP / Control Server started at 127.0.0.1:{port}");
+                        app = app.with_control(rx);
+                    }
+                    Err(error) => {
+                        let message =
+                            format!("MCP / Control Server could not start on 127.0.0.1:{port}: {error}. Check the port in Settings ▸ Startup & Repair.");
+                        log::error!("{message}");
+                        app.ui.status = message;
+                    }
+                }
             }
             log::info!("app created; the window shows after its first frame");
             Ok(Box::new(Desktop {
@@ -338,7 +369,7 @@ fn main() -> eframe::Result {
                 #[cfg(target_os = "macos")]
                 apple_events: apple_events.connect(&cc.egui_ctx),
                 app,
-                window: window::Tracker::new(opened, saved_window, control_port.is_none()),
+                window: window::Tracker::new(opened, saved_window, !agent_mode),
                 launch,
                 drawn: false,
             }))
@@ -517,7 +548,9 @@ fn disable_app_nap() {
 
 #[cfg(test)]
 mod tests {
-    use super::{Args, parse_args};
+    use super::{Args, parse_args, startup_control_port};
+    use effectcraft_engine::prefs::Prefs;
+    use serde_json::json;
     use std::env::VarError;
 
     fn parse_env(args: &[&str], env_port: Result<String, VarError>) -> Result<Option<Args>, String> {
@@ -642,6 +675,23 @@ mod tests {
             let not_utf8 = VarError::NotUnicode(std::ffi::OsString::from_vec(vec![0x39, 0xff]));
             assert_eq!(parse_env(&[], Err(not_utf8)).unwrap_err(), format!("{need}, not `9\u{fffd}`"));
         }
+    }
+
+    #[test]
+    fn mcp_control_server_autostart_is_opt_in_and_uses_saved_port() {
+        let defaults = Prefs::default();
+        assert_eq!(startup_control_port(None, Some(&defaults.to_json())), None);
+        assert_eq!(startup_control_port(None, None), None);
+
+        let mut prefs = Prefs::default();
+        prefs.set("startup.controlServerEnabled", json!(true)).unwrap();
+        assert_eq!(prefs.startup.control_server_port, 9875);
+        assert_eq!(startup_control_port(None, Some(&prefs.to_json())), Some(9875));
+
+        prefs.set("startup.controlServerPort", json!(12345)).unwrap();
+        assert_eq!(startup_control_port(None, Some(&prefs.to_json())), Some(12345));
+        assert_eq!(startup_control_port(Some(23456), Some(&prefs.to_json())), Some(23456));
+        assert_eq!(startup_control_port(None, Some("not json")), None);
     }
 
     /// #1275: a blocking desktop-portal dialog on Linux leaves the window not answering the
