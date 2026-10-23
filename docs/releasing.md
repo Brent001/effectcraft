@@ -2,9 +2,10 @@
 
 Every push to the `release` branch runs [`.github/workflows/release.yml`](../.github/workflows/release.yml).
 
-In the `Brent001/effectcraft` fork, the first community release is version `0.13.1` and builds
-Windows x64, Linux x86_64 and Web assets. After all selected build jobs succeed, it publishes
-the GitHub Release automatically so the assets are publicly downloadable. The Windows installer
+In the `Brent001/effectcraft` fork, pushing the dedicated `release/community-downloads` branch
+runs the first community release at version `0.13.1` and builds Windows x64, Linux x86_64 and Web
+assets. After all selected build jobs succeed, it publishes the GitHub Release automatically so
+the assets are publicly downloadable. The Windows installer
 may be unsigned when code-signing credentials are unavailable; the release notes disclose this,
 and the release includes `SHA256SUMS.txt`.
 
