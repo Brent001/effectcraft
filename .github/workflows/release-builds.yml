@@ -299,7 +299,7 @@ jobs:
       # from the repo's `release` environment. An unlisted name is empty, and the app's packaging
       # would then warn and ship unsigned, so on the release branch fail here instead.
       - name: Require signing secrets on the release branch
-        if: github.ref == 'refs/heads/release'
+        if: github.ref == 'refs/heads/release' && github.repository == 'storytold/effectcraft'
         shell: bash
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
@@ -429,7 +429,7 @@ jobs:
       # See the macOS job: unlisted secrets are empty, and the build would ship unsigned.
       # Signing needs either the PFX pair or all six Azure Trusted Signing values.
       - name: Require signing secrets on the release branch
-        if: github.ref == 'refs/heads/release'
+        if: github.ref == 'refs/heads/release' && github.repository == 'storytold/effectcraft'
         shell: bash
         env:
           WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
@@ -1155,3 +1155,17 @@ jobs:
           app-title: ${{ inputs.app-title }}
           prerelease: ${{ needs.version.outputs.prerelease }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
+      # Fork release jobs should publish only after every requested build has succeeded.
+      # The upstream repo retains its manual draft review/publish process.
+      - name: Publish community release
+        if: github.repository == 'Brent001/effectcraft'
+        shell: bash
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag="v$VERSION"
+          body="$(gh release view "$tag" --json body --jq .body)"
+          printf '%s\n\n## Distribution note\n\nThis is a community build published from `Brent001/effectcraft`. The Windows installer may be unsigned because this fork does not necessarily have code-signing credentials. Verify downloaded files using `SHA256SUMS.txt`.\n' "$body" > release-notes.md
+          gh release edit "$tag" --notes-file release-notes.md --draft=false --latest
