@@ -173,6 +173,9 @@ fn main() -> eframe::Result {
     let config_dir = effectcraft_host::config_dir();
     let saved_prefs = config_dir.as_deref().and_then(|dir| std::fs::read_to_string(dir.join(effectcraft_engine::prefs::PREFS_FILE)).ok());
     let control_port = startup_control_port(explicit_control_port, saved_prefs.as_deref());
+    // Only an explicit CLI/environment launch is agent-driven. A listener started from Settings
+    // must leave the desktop's normal focus, Home screen and recovery behavior unchanged.
+    let agent_mode = explicit_control_port.is_some();
 
     // The session log lives in the settings folder (`Logs/effectcraft.log`, the previous two runs
     // kept): a launch from the Dock or a menu has no terminal. Opened after the arguments, so
@@ -201,11 +204,11 @@ fn main() -> eframe::Result {
             .with_min_inner_size(window::MIN_SIZE)
             .with_drag_and_drop(true)
             // Started for an agent (`--control`): open without taking the user's keyboard focus.
-            .with_active(control_port.is_none())
+            .with_active(!agent_mode)
             .with_icon(app_icon())
             // Wayland matches the window to `ai.storyteller.effectcraft.desktop` by this ID.
             .with_app_id(appimage::APP_ID),
-        event_loop_builder: agent_event_loop(control_port.is_some()),
+        event_loop_builder: agent_event_loop(agent_mode),
         wgpu_options: wgpu_options(launch.backends),
         ..Default::default()
     };
@@ -262,7 +265,7 @@ fn main() -> eframe::Result {
             // Fit the window to its monitor, or put it back where it was (still hidden).
             let saved_window = session.config.as_deref().and_then(window::load);
             let opened = cc.winit_window().map(|w| window::restore(w, saved_window));
-            let recovery = if control_port.is_none() { session.begin_recovery() } else { None };
+            let recovery = if !agent_mode { session.begin_recovery() } else { None };
             let project = files.iter().find(|f| is_project_file(f)).cloned();
             if let Some(p) = project {
                 if let Err(e) = session.execute("file.open", json!({"path": p})) {
@@ -277,7 +280,7 @@ fn main() -> eframe::Result {
             {
                 log::warn!("import: {e}");
             }
-            let show_home = home.unwrap_or(session.prefs.startup.show_home_on_launch && files.is_empty() && control_port.is_none());
+            let show_home = home.unwrap_or(session.prefs.startup.show_home_on_launch && files.is_empty() && !agent_mode);
             // The ScriptUI panels open when the app last quit open again (a failing one is
             // reported in a toast and forgotten).
             let _ = session.execute("window.restoreScriptPanels", json!({}));
@@ -304,7 +307,7 @@ fn main() -> eframe::Result {
             }));
             // The window closes after a lost graphics device (#591); say why, unless an agent drives
             // the app through the control channel.
-            if control_port.is_none() {
+            if !agent_mode {
                 app.hooks.device_lost = Some(Box::new(|saved: Option<Result<String, String>>| {
                     let saved = match saved {
                         Some(Ok(path)) => format!("\n\nYour unsaved changes were saved to:\n{path}\n\nReopen EffectCraft to recover them."),
@@ -366,7 +369,7 @@ fn main() -> eframe::Result {
                 #[cfg(target_os = "macos")]
                 apple_events: apple_events.connect(&cc.egui_ctx),
                 app,
-                window: window::Tracker::new(opened, saved_window, control_port.is_none()),
+                window: window::Tracker::new(opened, saved_window, !agent_mode),
                 launch,
                 drawn: false,
             }))
