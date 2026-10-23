@@ -597,7 +597,16 @@ impl GpuContext {
     /// Preserves the host's device handlers. The host must forward failures using
     /// [`Self::device_failure_notifier`] for immediate readback cancellation.
     pub fn new(adapter: &wgpu::Adapter, device: wgpu::Device, queue: wgpu::Queue) -> Result<GpuContext, String> {
+        let init_started = web_time::Instant::now();
         let info = adapter.get_info();
+        log::info!(
+            "gpu init: starting compositor context for {} ({:?}, {:?}; driver={} {})",
+            info.name,
+            info.backend,
+            info.device_type,
+            info.driver,
+            info.driver_info
+        );
         let budgets = memory_budgets(info.device_type);
         if !adapter.get_downlevel_capabilities().flags.contains(wgpu::DownlevelFlags::COMPUTE_SHADERS) {
             return Err(format!("{} ({:?}): no compute shaders", info.name, info.backend));
@@ -610,6 +619,15 @@ impl GpuContext {
         // egui-wgpu asks for WebGL2's limits on GL (no storage buffers at all): building the
         // pipelines there would be a validation error, which release builds only log.
         let l = device.limits();
+        log::info!(
+            "gpu init: device limits: storage_buffers={}, storage_textures={}, bind_groups={}, workgroup={}x{}, invocations={}; required storage_buffers>=7, storage_textures>=1, bind_groups>=2, workgroup>=64x16, invocations>=256",
+            l.max_storage_buffers_per_shader_stage,
+            l.max_storage_textures_per_shader_stage,
+            l.max_bind_groups,
+            l.max_compute_workgroup_size_x,
+            l.max_compute_workgroup_size_y,
+            l.max_compute_invocations_per_workgroup
+        );
         let needs = [
             // `adv3d`'s post kernels bind 7 (its rasteriser's fragment stage 6).
             ("max_storage_buffers_per_shader_stage", l.max_storage_buffers_per_shader_stage, 7),
@@ -627,13 +645,19 @@ impl GpuContext {
                 return Err(format!("{} ({:?}): {f:?} storage textures unsupported", info.name, info.backend));
             }
         }
+        log::info!("gpu init: creating readback bookkeeping");
         let readbacks = crate::readback::Readbacks::new()?;
+        log::info!("gpu init: readback bookkeeping ready");
         let name = format!("{} ({:?})", info.name, info.backend);
         let adv3d_unsupported = crate::adv3d::raster_unsupported(adapter);
         if let Some(why) = &adv3d_unsupported {
             log::info!("gpu {name}: Advanced 3D renders on the CPU ({why})");
         }
+        log::info!("gpu init: compiling core WGSL shader module");
+        let stage_started = web_time::Instant::now();
         let module = kernel_module(&device, "effectcraft kernels", &[])?;
+        log::info!("gpu init: core WGSL shader module ready in {:?}", stage_started.elapsed());
+        log::info!("gpu init: creating core bind-group and pipeline layouts");
         let bgl = init_resource(&device, "kernels bind-group layout", || {
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 label: Some("effectcraft kernels"),
@@ -686,20 +710,43 @@ impl GpuContext {
                 immediate_size: 0,
             })
         })?;
+        log::info!("gpu init: core bind-group and pipeline layouts ready");
+
         // Keep core compositor kernels ready; load effect-specific shader modules/pipelines lazily.
+        log::info!("gpu init: compiling sky shader module");
+        let stage_started = web_time::Instant::now();
         let sky = kernel_module(&device, "effectcraft sky", &[include_str!("shaders/sky.wgsl")])?;
+        log::info!("gpu init: sky shader module ready in {:?}", stage_started.elapsed());
+        log::info!("gpu init: compiling Classic 3D shader module");
+        let stage_started = web_time::Instant::now();
         let classic3d = kernel_module(&device, "effectcraft classic3d", &[include_str!("shaders/classic3d.wgsl")])?;
-        let mut pipelines = ENTRIES.iter().map(|e| Ok((*e, build_pipeline(&device, &module, &layout, e)?))).collect::<Result<HashMap<_, _>, String>>()?;
+        log::info!("gpu init: Classic 3D shader module ready in {:?}", stage_started.elapsed());
+
+        let mut pipelines = HashMap::new();
+        for entry in ENTRIES.iter().copied() {
+            let stage_started = web_time::Instant::now();
+            log::info!("gpu init: compiling core compute pipeline '{entry}'");
+            let pipeline = build_pipeline(&device, &module, &layout, entry)?;
+            log::info!("gpu init: core compute pipeline '{entry}' ready in {:?}", stage_started.elapsed());
+            pipelines.insert(entry, pipeline);
+        }
         for entry in crate::adv3d::SKY_KERNELS.iter().copied() {
-            pipelines.insert(entry, build_pipeline(&device, &sky, &layout, entry)?);
+            let stage_started = web_time::Instant::now();
+            log::info!("gpu init: compiling sky compute pipeline '{entry}'");
+            let pipeline = build_pipeline(&device, &sky, &layout, entry)?;
+            log::info!("gpu init: sky compute pipeline '{entry}' ready in {:?}", stage_started.elapsed());
+            pipelines.insert(entry, pipeline);
         }
 
         // Classic 3D has a second storage-buffer bind group and remains optional on drivers
         // whose shader compiler rejects it.
         let mut unavailable = Vec::new();
         for entry in EXT_ENTRIES {
+            let stage_started = web_time::Instant::now();
+            log::info!("gpu init: compiling optional Classic 3D pipeline '{entry}'");
             match build_pipeline(&device, &classic3d, &layout_ext, entry) {
                 Ok(pipeline) => {
+                    log::info!("gpu init: optional Classic 3D pipeline '{entry}' ready in {:?}", stage_started.elapsed());
                     pipelines.insert(*entry, pipeline);
                 }
                 Err(why) => {
@@ -716,12 +763,15 @@ impl GpuContext {
             .collect();
         let modules = std::iter::once(std::sync::OnceLock::from(Ok(module))).chain(FAMILIES.iter().skip(1).map(|_| std::sync::OnceLock::new())).collect();
 
+        log::info!("gpu init: compiling display WGSL shader module");
+        let stage_started = web_time::Instant::now();
         let dmodule = init_resource(&device, "display shader module", || {
             device.create_shader_module(wgpu::ShaderModuleDescriptor {
                 label: Some("effectcraft display"),
                 source: wgpu::ShaderSource::Wgsl(include_str!("shaders/display.wgsl").into()),
             })
         })?;
+        log::info!("gpu init: display WGSL shader module ready in {:?}", stage_started.elapsed());
         let display_bgl = init_resource(&device, "display bind-group layout", || {
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 label: Some("effectcraft display"),
@@ -736,7 +786,9 @@ impl GpuContext {
             })
         })?;
         let display_pipeline = |entry: &'static str| {
-            init_resource(&device, "display compute pipeline", || {
+            let stage_started = web_time::Instant::now();
+            log::info!("gpu init: compiling display compute pipeline '{entry}'");
+            let result = init_resource(&device, "display compute pipeline", || {
                 device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
                     label: Some(entry),
                     layout: Some(&dlayout),
@@ -745,7 +797,12 @@ impl GpuContext {
                     compilation_options: Default::default(),
                     cache: None,
                 })
-            })
+            });
+            match &result {
+                Ok(_) => log::info!("gpu init: display compute pipeline '{entry}' ready in {:?}", stage_started.elapsed()),
+                Err(error) => log::error!("gpu init: display compute pipeline '{entry}' failed after {:?}: {error}", stage_started.elapsed()),
+            }
+            result
         };
         let display = display_pipeline("display")?;
         let display_mip = display_pipeline("mip")?;
@@ -767,7 +824,7 @@ impl GpuContext {
         let max_dim = device.limits().max_texture_dimension_2d;
         let mut pool = Pool::default();
         pool.budget = budgets.pool;
-        Ok(GpuContext {
+        let context = GpuContext {
             device,
             queue,
             name,
@@ -799,7 +856,14 @@ impl GpuContext {
             particle_states: Default::default(),
             deferred: None,
             readbacks,
-        })
+        };
+        log::info!(
+            "gpu init: compositor context ready in {:?}; {} pipelines available, {} optional pipelines unavailable",
+            init_started.elapsed(),
+            context.pipelines.len(),
+            context.unavailable.len()
+        );
+        Ok(context)
     }
 
     /// Whether this context has observed a readback timeout or device failure.
