@@ -28,6 +28,7 @@ pollster = { workspace = true }
 
 [dev-dependencies]
 effectcraft-text = { workspace = true }
+naga = { version = "30.0.1", features = ["wgsl-in"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen = "=0.2.129"

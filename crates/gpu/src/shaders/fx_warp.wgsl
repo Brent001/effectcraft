@@ -184,7 +184,7 @@ fn fxw_bendit(@builtin(global_invocation_id) gid: vec3<u32>) {
     let ly = dot(v, n);
     // Arc: rho - |(lx, ly - rho)| without cancellation for large radii.
     let dy = ly - rho;
-    let th = atan2_p(lx, -dy);
+    let th = atan2(lx, -dy);
     let dd = lx * lx + ly * ly - 2.0 * ly * rho;
     let w_arc = -dd / (rho + sqrt(max(rho * rho + dd, 0.0)));
     var cand: array<vec3<f32>, 3>;
