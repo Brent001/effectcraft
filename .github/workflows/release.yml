@@ -1,4 +1,5 @@
 name: Release
+run-name: EffectCraft public community release (${{ github.ref_name }})
 
 on:
   push:
