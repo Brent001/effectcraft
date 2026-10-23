@@ -243,7 +243,8 @@ jobs:
     name: macOS universal
     needs: version
     runs-on: macos-15-xlarge
-    environment: release
+    environment:
+      name: ${{ github.repository == 'Brent001/effectcraft' && github.ref == 'refs/heads/release/community-downloads' && 'community-release' || 'release' }}
     env:
       CARGO_TERM_COLOR: always
       CARGO_INCREMENTAL: 0
@@ -370,7 +371,8 @@ jobs:
     name: Windows ${{ matrix.arch }}
     needs: [version, target_selection]
     runs-on: windows-latest
-    environment: release
+    environment:
+      name: ${{ github.repository == 'Brent001/effectcraft' && github.ref == 'refs/heads/release/community-downloads' && 'community-release' || 'release' }}
     strategy:
       fail-fast: false
       matrix:
@@ -1145,7 +1147,8 @@ jobs:
        (inputs.has-flatpak-x86_64 && inputs.has-linux-x86_64) || (inputs.has-flatpak-aarch64 && inputs.has-linux-aarch64))
     needs: [version, target_selection, macos, windows, linux, linux-riscv64, flatpak, arch, freebsd, web, server]
     runs-on: ubuntu-latest
-    environment: release
+    environment:
+      name: ${{ github.repository == 'Brent001/effectcraft' && github.ref == 'refs/heads/release/community-downloads' && 'community-release' || 'release' }}
     permissions:
       contents: write
     steps:
@@ -1158,7 +1161,7 @@ jobs:
       # Fork release jobs should publish only after every requested build has succeeded.
       # The upstream repo retains its manual draft review/publish process.
       - name: Publish community release
-        if: github.repository == 'Brent001/effectcraft'
+        if: github.repository == 'Brent001/effectcraft' && github.ref == 'refs/heads/release/community-downloads'
         shell: bash
         env:
           VERSION: ${{ needs.version.outputs.version }}
