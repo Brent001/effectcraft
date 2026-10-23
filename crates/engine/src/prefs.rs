@@ -1203,7 +1203,9 @@ pub fn pages() -> Vec<Page> {
                 Section("Agent / MCP Control Server"),
                 s("startup.controlServerEnabled", "Enable MCP / Control Server on Startup", B, true),
                 s("startup.controlServerPort", "MCP / Control Server Port", Kind::Int(1, 65535, "port"), true),
-                Note("When enabled, EffectCraft starts its loopback-only agent control server on the next launch. It listens only on 127.0.0.1; command-line --control and EFFECTCRAFT_CONTROL_PORT override these settings."),
+                Note(
+                    "When enabled, EffectCraft starts its loopback-only agent control server on the next launch. It listens only on 127.0.0.1; command-line --control and EFFECTCRAFT_CONTROL_PORT override these settings.",
+                ),
                 s("startup.offerCrashRecovery", "Offer to Open the Latest Auto-Save After a Crash", B, true),
                 s("startup.windowGraphics", "Window Graphics", Kind::Choice(WINDOW_GRAPHICS), true),
                 Note(
