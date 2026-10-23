@@ -824,7 +824,7 @@ impl GpuContext {
         let max_dim = device.limits().max_texture_dimension_2d;
         let mut pool = Pool::default();
         pool.budget = budgets.pool;
-        Ok(GpuContext {
+        let context = GpuContext {
             device,
             queue,
             name,
