@@ -1773,8 +1773,8 @@ mod shader_source_validation_tests {
     use naga::valid::{Capabilities, ValidationFlags, Validator};
 
     fn validate_shader(label: &str, source: String) {
-        let module = naga::front::wgsl::parse_str(&source)
-            .unwrap_or_else(|error| panic!("GPU shader '{label}' failed WGSL parsing: {}", error.emit_to_string(&source)));
+        let module =
+            naga::front::wgsl::parse_str(&source).unwrap_or_else(|error| panic!("GPU shader '{label}' failed WGSL parsing: {}", error.emit_to_string(&source)));
         Validator::new(ValidationFlags::all(), Capabilities::all())
             .validate(&module)
             .unwrap_or_else(|error| panic!("GPU shader '{label}' failed WGSL validation: {error:?}"));
@@ -1787,10 +1787,7 @@ mod shader_source_validation_tests {
             validate_shader(label, source);
         }
 
-        for (label, extra) in [
-            ("sky", include_str!("shaders/sky.wgsl")),
-            ("classic3d", include_str!("shaders/classic3d.wgsl")),
-        ] {
+        for (label, extra) in [("sky", include_str!("shaders/sky.wgsl")), ("classic3d", include_str!("shaders/classic3d.wgsl"))] {
             let source: String = super::BASE_WGSL.iter().copied().chain([extra]).collect();
             validate_shader(label, source);
         }
