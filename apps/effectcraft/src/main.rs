@@ -154,7 +154,8 @@ fn main() -> eframe::Result {
     // feed the compatibility report.
     effectcraft_engine::logging::install();
     effectcraft_engine::logging::install_panic_hook();
-    let Args { control_port: explicit_control_port, files, demo, home } = match parse_args(std::env::args().skip(1), std::env::var("EFFECTCRAFT_CONTROL_PORT")) {
+    let Args { control_port: explicit_control_port, files, demo, home } = match parse_args(std::env::args().skip(1), std::env::var("EFFECTCRAFT_CONTROL_PORT"))
+    {
         Ok(Some(args)) => args,
         Ok(None) => {
             println!("effectcraft {}", env!("CARGO_PKG_VERSION"));
@@ -351,9 +352,8 @@ fn main() -> eframe::Result {
                         app = app.with_control(rx);
                     }
                     Err(error) => {
-                        let message = format!(
-                            "MCP / Control Server could not start on 127.0.0.1:{port}: {error}. Check the port in Settings ▸ Startup & Repair."
-                        );
+                        let message =
+                            format!("MCP / Control Server could not start on 127.0.0.1:{port}: {error}. Check the port in Settings ▸ Startup & Repair.");
                         log::error!("{message}");
                         app.ui.status = message;
                     }
@@ -546,9 +546,9 @@ fn disable_app_nap() {
 #[cfg(test)]
 mod tests {
     use super::{Args, parse_args, startup_control_port};
-    use std::env::VarError;
     use effectcraft_engine::prefs::Prefs;
     use serde_json::json;
+    use std::env::VarError;
 
     fn parse_env(args: &[&str], env_port: Result<String, VarError>) -> Result<Option<Args>, String> {
         parse_args(args.iter().map(|a| a.to_string()), env_port)
