@@ -1767,3 +1767,34 @@ mod adapter_name_tests {
         assert!(e.contains("no adapters on the enabled backends"), "{e}");
     }
 }
+
+#[cfg(test)]
+mod shader_source_validation_tests {
+    use naga::valid::{Capabilities, ValidationFlags, Validator};
+
+    fn validate_shader(label: &str, source: String) {
+        let module = naga::front::wgsl::parse_str(&source)
+            .unwrap_or_else(|error| panic!("GPU shader '{label}' failed WGSL parsing: {}", error.emit_to_string(&source)));
+        Validator::new(ValidationFlags::all(), Capabilities::all())
+            .validate(&module)
+            .unwrap_or_else(|error| panic!("GPU shader '{label}' failed WGSL validation: {error:?}"));
+    }
+
+    #[test]
+    fn all_gpu_shader_families_validate_without_a_physical_gpu() {
+        for (label, files, _) in super::FAMILIES {
+            let source: String = super::BASE_WGSL.iter().chain(files.iter()).copied().collect();
+            validate_shader(label, source);
+        }
+
+        for (label, extra) in [
+            ("sky", include_str!("shaders/sky.wgsl")),
+            ("classic3d", include_str!("shaders/classic3d.wgsl")),
+        ] {
+            let source: String = super::BASE_WGSL.iter().copied().chain([extra]).collect();
+            validate_shader(label, source);
+        }
+
+        validate_shader("display", include_str!("shaders/display.wgsl").to_owned());
+    }
+}
