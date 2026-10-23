@@ -1167,5 +1167,12 @@ jobs:
           set -euo pipefail
           tag="v$VERSION"
           body="$(gh release view "$tag" --json body --jq .body)"
-          printf '%s\n\n## Distribution note\n\nThis is a community build published from `Brent001/effectcraft`. The Windows installer may be unsigned because this fork does not necessarily have code-signing credentials. Verify downloaded files using `SHA256SUMS.txt`.\n' "$body" > release-notes.md
+          {
+            printf '%s\n\n' "$body"
+            cat <<'RELEASE_NOTE'
+          ## Distribution note
+
+          This is a community build published from Brent001/effectcraft. The Windows installer may be unsigned because this fork does not necessarily have code-signing credentials. Verify downloaded assets using SHA256SUMS.txt.
+          RELEASE_NOTE
+          } > release-notes.md
           gh release edit "$tag" --notes-file release-notes.md --draft=false --latest
