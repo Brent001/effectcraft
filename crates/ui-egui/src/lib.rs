@@ -833,10 +833,7 @@ impl EffectcraftApp {
                     .and_then(|result| result);
                 match &result {
                     Ok(_) => log::info!("GPU compositor initialization worker: Gpu::new succeeded in {:?}", worker_started.elapsed()),
-                    Err(error) => log::warn!(
-                        "GPU compositor initialization worker: Gpu::new failed after {:?}: {error}",
-                        worker_started.elapsed()
-                    ),
+                    Err(error) => log::warn!("GPU compositor initialization worker: Gpu::new failed after {:?}: {error}", worker_started.elapsed()),
                 }
                 let _ = tx.send(result);
             });
