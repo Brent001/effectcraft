@@ -265,7 +265,7 @@ send us right now.
 
 **Community build of this fork:** [Download from Brent001/effectcraft Releases](https://github.com/Brent001/effectcraft/releases/latest). The first community release targets Windows x64, Linux x86_64 and WebAssembly. The Windows installer may be unsigned; verify downloaded assets against `SHA256SUMS.txt` on the release page.
 
-**New to EffectCraft?** Download it from the [EffectCraft page on getartcraft.com](https://getartcraft.com/apps/effectcraft). That's the easiest way to install it.
+**New to EffectCraft?** Download the official upstream build from the [EffectCraft page on getartcraft.com](https://getartcraft.com/apps/effectcraft). That's the easiest way to install it.
 
 **Want a specific build or format?** On GitHub, the [latest release](https://github.com/storytold/effectcraft/releases/latest) has every build listed below, and [all releases](https://github.com/storytold/effectcraft/releases) has earlier versions and their notes. `<ver>` in the file names is the version number, and `SHA256SUMS.txt` lists a checksum for every file.
 
