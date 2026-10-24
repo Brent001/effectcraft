@@ -8,9 +8,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Release version override (defaults to the first fork release)"
+        description: "Release version override"
         type: string
-        default: "0.13.1"
+        default: "0.16.1"
       has-macos:
         description: "Build macOS universal"
         type: boolean
@@ -85,9 +85,9 @@ jobs:
     with:
       app-name: effectcraft
       app-title: EffectCraft
-      # The first fork release builds Windows x64, Linux x86_64 and Web. Bump this version
-      # before triggering a second release on the release branch.
-      version: ${{ github.event_name == 'push' && '0.13.1' || inputs.version }}
+      # The community push path builds Windows x64, Linux x86_64 and Web. Keep the release version
+      # aligned with the workspace version; use workflow_dispatch to select additional targets.
+      version: ${{ github.event_name == 'push' && '0.16.1' || inputs.version }}
       has-macos: ${{ github.event_name == 'workflow_dispatch' && inputs.has-macos }}
       has-windows-x64: ${{ github.event_name == 'push' || inputs.has-windows-x64 }}
       has-windows-x86: ${{ github.event_name == 'workflow_dispatch' && inputs.has-windows-x86 }}
