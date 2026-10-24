@@ -1152,6 +1152,14 @@ jobs:
     permissions:
       contents: write
     steps:
+      # The release job downloads artifacts but does not otherwise have a checkout.
+      # gh release edit can invoke git to resolve the repository context, so check out
+      # the exact build commit before creating/publishing the release.
+      - name: Check out repository for release metadata
+        if: github.repository == 'Brent001/effectcraft' && github.ref == 'refs/heads/release/community-downloads'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
       - uses: storytold/craft-common-actions/actions/draft-release@main
         with:
           version: ${{ needs.version.outputs.version }}
@@ -1166,10 +1174,11 @@ jobs:
         env:
           VERSION: ${{ needs.version.outputs.version }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
           tag="v$VERSION"
-          body="$(gh release view "$tag" --json body --jq .body)"
+          body="$(gh release view "$tag" --repo "$GH_REPO" --json body --jq .body)"
           {
             printf '%s\n\n' "$body"
             cat <<'RELEASE_NOTE'
@@ -1178,4 +1187,4 @@ jobs:
           This is a community build published from Brent001/effectcraft. The Windows installer may be unsigned because this fork does not necessarily have code-signing credentials. Verify downloaded assets using SHA256SUMS.txt.
           RELEASE_NOTE
           } > release-notes.md
-          gh release edit "$tag" --notes-file release-notes.md --draft=false --latest
+          gh release edit "$tag" --repo "$GH_REPO" --notes-file release-notes.md --draft=false --latest
