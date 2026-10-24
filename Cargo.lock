@@ -1351,6 +1351,7 @@ dependencies = [
  "effectcraft-time",
  "js-sys",
  "log",
+ "naga",
  "pollster 0.4.0",
  "wasm-bindgen",
  "web-time",
