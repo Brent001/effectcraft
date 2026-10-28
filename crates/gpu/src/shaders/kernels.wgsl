@@ -561,7 +561,7 @@ fn soft_linear_noise(x: f32, y: f32, z: f32, seed: u32) -> f32 {
     let wy = bspline(y + 0.5 - y0);
     let a = soft_linear_slice(i32(x0), i32(y0), i32(z0), wx, wy, seed);
     let b = soft_linear_slice(i32(x0), i32(y0), i32(z0) + 1, wx, wy, seed);
-    let n = a + (b - a) * fade(z - z0);
+    let n = a + (b - a) * (z - z0);
     return 0.5 + (n - 0.5) * SOFT_LINEAR_GAIN;
 }
 
@@ -649,7 +649,9 @@ fn pointwise(@builtin(global_invocation_id) gid: vec3<u32>) {
         case 1u: {
             if (a > 0.0) {
                 let c = straight(px);
-                let l = clamp(luminance(c), 0.0, 1.0);
+                // Rec. 601 weights, as After Effects: effects::LUMA_601 (checked by the test
+                // shader_constants_match_the_cpu).
+                let l = clamp(0.299 * c.x + 0.587 * c.y + 0.114 * c.z, 0.0, 1.0);
                 let blk = P.f[0].xyz;
                 let wht = P.f[1].xyz;
                 let t = blk + (wht - blk) * l;
@@ -666,7 +668,15 @@ fn pointwise(@builtin(global_invocation_id) gid: vec3<u32>) {
                     px = vec4<f32>(max((c + br - 0.5) * k + 0.5, vec3<f32>(0.0)) * a, a);
                 } else if (P.u[0].y == 2u) {
                     // Brightness & Contrast tone curves (effects crate bc_modern, AE-fitted #681).
-                    let g = max(1.0 + 0.53 * ct, 0.05);
+                    // Negative settings invert the positive curves (reciprocal exponents).
+                    var g = max(1.0 + 0.53 * abs(ct), 0.05);
+                    if (ct < 0.0) {
+                        g = 1.0 / g;
+                    }
+                    var e = exp2(1.24 * abs(br));
+                    if (br < 0.0) {
+                        e = 1.0 / e;
+                    }
                     let o = vec3<f32>(bc_modern(c.x, br, ct, g), bc_modern(c.y, br, ct, g), bc_modern(c.z, br, ct, g));
                     px = vec4<f32>(o * a, a);
                 }
@@ -762,17 +772,13 @@ fn pointwise(@builtin(global_invocation_id) gid: vec3<u32>) {
             let c = P.f[0];
             let invert = P.u[0].y != 0u;
             let opacity = P.f[1].x;
+            // The fill colour at the layer's (or inverted) alpha times Opacity (color_fx::fill).
             var fa = px.w;
             if (invert) {
                 fa = 1.0 - px.w;
             }
-            let f = c.xyz * fa;
-            let rgb = px.xyz + (f - px.xyz) * opacity;
-            var alpha = px.w;
-            if (invert) {
-                alpha = px.w + (fa - px.w) * opacity;
-            }
-            px = vec4<f32>(rgb, alpha);
+            fa = fa * opacity;
+            px = vec4<f32>(c.xyz * fa, fa);
         }
         case 8u: {
             // effects::color2::map_ca: transparent pixels only change through the alpha curve.
