@@ -59,4 +59,4 @@ jobs:
       - name: Compile the updated UI viewer and GPU display path
         run: cargo check --locked -p effectcraft-ui-egui
       - name: Verify playback renders past cached frames
-        run: cargo test --locked -p effectcraft-ui-egui --test ui_preview_align playback_prefetches_past_the_cached_frames_ahead
+        run: cargo test --locked -p effectcraft-ui-egui --test it playback_prefetches_past_the_cached_frames_ahead
