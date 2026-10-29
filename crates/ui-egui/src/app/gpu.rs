@@ -24,11 +24,7 @@ impl EffectcraftApp {
         extended_view: bool,
         needs_display_color_conversion: bool,
     ) -> bool {
-        channel == effectcraft_engine::viewer::Channel::Rgb
-            && exposure_zero
-            && !has_roi
-            && !extended_view
-            && !needs_display_color_conversion
+        channel == effectcraft_engine::viewer::Channel::Rgb && exposure_zero && !has_roi && !extended_view && !needs_display_color_conversion
     }
 
     fn gpu_display(&self) -> bool {

@@ -1097,7 +1097,9 @@ impl GpuContext {
         cell.get_or_init(|| {
             let extra = if *label == "fx_noise" { Some(self.median_kernel.source()) } else { None };
             kernel_module_with_extra(&self.device, label, files, extra)
-        }).as_ref().map_err(Clone::clone)
+        })
+        .as_ref()
+        .map_err(Clone::clone)
     }
 
     /// Leave kernel `entry` out, as if it had failed to build (tests of the CPU fallback).
