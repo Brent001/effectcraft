@@ -10,6 +10,18 @@ use serde_json::{Value, json};
 
 use crate::{Outcome, run_code};
 
+mod callable;
+mod ease_presets;
+mod evalfile;
+mod include;
+mod panels;
+#[cfg(not(windows))]
+mod services;
+mod tasks;
+mod ui;
+mod ui_more;
+mod ui_mouse;
+
 fn session() -> Session {
     let mut s = Session { expr: Some(Arc::new(effectcraft_expr::Expressions)), expr_check: Some(effectcraft_expr::check_syntax), ..Default::default() };
     crate::install(&mut s);
@@ -441,6 +453,38 @@ fn layers_items_and_markers() {
             .iter()
             .any(|l| l.name == "Key"
                 && matches!(l.source, effectcraft_engine::project::LayerSource::Light { kind: effectcraft_engine::project::LightKind::Spot }))
+    );
+}
+
+#[test]
+fn folder_paths_trim_trailing_separators() {
+    let mut s = session();
+    let o = ok(
+        &mut s,
+        r#"
+        var paths = ['', '/', '///', 'a/b/', 'a\\b\\/', 'a/b', 'a/\n'];
+        var result = paths.map(function (path) {
+          var folder = new Folder(path);
+          return [folder.name, folder.path, __join(path, 'child')];
+        });
+        // A long run followed by a non-separator used to cause quadratic regex backtracking.
+        var longPath = Array(20001).join('/') + 'x';
+        result.push([new Folder(longPath).name, new Folder(longPath).path.length, __join(longPath, 'child').length]);
+        result
+        "#,
+    );
+    assert_eq!(
+        o.result,
+        json!([
+            ["", "", "/child"],
+            ["", "", "/child"],
+            ["", "", "/child"],
+            ["b", "a", "a/b/child"],
+            ["b", "a", "a\\b/child"],
+            ["b", "a", "a/b/child"],
+            ["\n", "a", "a/\n/child"],
+            ["x", 19999, 20007]
+        ])
     );
 }
 

@@ -78,7 +78,7 @@ fn page_ui(app: &mut EffectcraftApp, ui: &mut egui::Ui, page: &Page, cur: &Value
                 ui.horizontal(|ui| {
                     ui.add_sized(vec2(label_w, 18.0), egui::Label::new(tr("Default Output:")));
                     let shown = if sel.is_empty() { tr("System Default").to_string() } else { sel.clone() };
-                    let r = egui::ComboBox::from_id_salt(("settings", key)).selected_text(shown).width(260.0).show_ui(ui, |ui| {
+                    let r = craft_ui::ComboBox::from_id_salt(("settings", key)).selected_text(shown).width(260.0).show_ui(ui, |ui| {
                         if ui.selectable_label(sel.is_empty(), tr("System Default")).clicked() {
                             acts.push(Act::Set(key.into(), json!("")));
                         }
@@ -157,7 +157,7 @@ fn page_ui(app: &mut EffectcraftApp, ui: &mut egui::Ui, page: &Page, cur: &Value
                                 Kind::Choice(opts) => {
                                     let curv = v.as_str().map_or_else(|| v.to_string(), str::to_string);
                                     let shown = opts.iter().find(|o| o.1 == curv).map(|o| o.0).unwrap_or(curv.as_str()).to_string();
-                                    egui::ComboBox::from_id_salt(("settings", key))
+                                    craft_ui::ComboBox::from_id_salt(("settings", key))
                                         .selected_text(tr(&shown))
                                         .width(220.0)
                                         .show_ui(ui, |ui| {
@@ -302,19 +302,20 @@ fn theme_preview(ui: &mut egui::Ui, kind: ThemeKind, width: f32) {
     painter.line_segment([pos2(cti, graph.top()), pos2(cti, graph.bottom())], egui::Stroke::new(1.0, p.cti));
 }
 
+/// What [`theme_card`] shows: the setting `key`, the translated `title`, whether the family is
+/// `active`, the `cur`rent theme and the `options` (value, label) to pick from.
+struct ThemeFamily<'a> {
+    key: &'a str,
+    title: &'a str,
+    active: bool,
+    cur: &'a str,
+    options: &'a [(&'a str, &'a str)],
+}
+
 /// One theme family's card: its (translated) name, Active when the appearance shows it now, a preview of the
 /// chosen theme and a radio button per theme.
-fn theme_card(
-    app: &mut EffectcraftApp,
-    ui: &mut egui::Ui,
-    t: &Tokens,
-    key: &str,
-    title: &str,
-    active: bool,
-    cur: &str,
-    options: &[(&str, &str)],
-    acts: &mut Vec<Act>,
-) {
+fn theme_card(app: &mut EffectcraftApp, ui: &mut egui::Ui, t: &Tokens, fam: ThemeFamily, acts: &mut Vec<Act>) {
+    let ThemeFamily { key, title, active, cur, options } = fam;
     egui::Frame::new()
         .fill(t.field_bg)
         .stroke(egui::Stroke::new(1.0, if active { t.accent } else { t.field_border }))
@@ -346,7 +347,7 @@ fn theme_card(
                         let favorite = favorites.iter().any(|id| id == value);
                         let tip = tr(if favorite { "Remove from favorites" } else { "Add to favorites" });
                         let r = ui.add_visible(favorite || hovered, egui::Button::new("").min_size(vec2(24.0, 24.0)).frame(false)).on_hover_text(tip);
-                        r.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, format!("{}: {}", tip, tr(label))));
+                        r.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, format!("{}: {}", tip, tr(label))));
                         reg(app, &format!("settings.appearance.favoriteThemes.{value}"), &r, tip);
                         if favorite || hovered {
                             crate::icons::paint(
@@ -378,7 +379,7 @@ fn appearance_ui(app: &mut EffectcraftApp, ui: &mut egui::Ui, cur: &Value, t: &T
     ui.horizontal(|ui| {
         ui.add_sized(vec2(250.0, 18.0), egui::Label::new(format!("{}:", tr("Appearance Mode"))).truncate());
         let shown = APPEARANCE_MODES.iter().find(|(_, v)| *v == mode).map_or(mode.as_str(), |(l, _)| *l);
-        let r = egui::ComboBox::from_id_salt(("settings", "appearance.appearanceMode"))
+        let r = craft_ui::ComboBox::from_id_salt(("settings", "appearance.appearanceMode"))
             .selected_text(tr(shown))
             .width(220.0)
             .show_ui(ui, |ui| {
@@ -396,8 +397,20 @@ fn appearance_ui(app: &mut EffectcraftApp, ui: &mut egui::Ui, cur: &Value, t: &T
     let light_active = mode == "light" || (mode == "auto" && system_light == Some(true));
     ui.columns(2, |cols| {
         let [l, d] = cols else { return };
-        theme_card(app, l, t, "appearance.lightTheme", tr("Light Theme"), light_active, &light, LIGHT_THEMES, acts);
-        theme_card(app, d, t, "appearance.darkTheme", tr("Dark Theme"), !light_active, &dark, DARK_THEMES, acts);
+        theme_card(
+            app,
+            l,
+            t,
+            ThemeFamily { key: "appearance.lightTheme", title: tr("Light Theme"), active: light_active, cur: &light, options: LIGHT_THEMES },
+            acts,
+        );
+        theme_card(
+            app,
+            d,
+            t,
+            ThemeFamily { key: "appearance.darkTheme", title: tr("Dark Theme"), active: !light_active, cur: &dark, options: DARK_THEMES },
+            acts,
+        );
     });
     ui.add_space(6.0);
 }

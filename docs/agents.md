@@ -54,13 +54,13 @@ The release packages ship `effectcraft-cli` alongside the desktop app, so no bui
 
 | Install | CLI |
 |---|---|
-| Windows (MSI) | `C:\Program Files\EffectCraft\effectcraft-cli.exe` by default (wherever you installed it otherwise), not on `PATH` |
+| Windows (MSI) | `%LOCALAPPDATA%\Programs\ArtCraft\EffectCraft\effectcraft-cli.exe` by default (`C:\Program Files\ArtCraft\EffectCraft\effectcraft-cli.exe` for an all-users install, under `Program Files (x86)` instead for the 32-bit build, or wherever you installed it otherwise), not on `PATH` |
 | Linux (deb, rpm) | `/usr/bin/effectcraft-cli` |
 | macOS | the separate `effectcraft-cli-<version>-macos-<arch>.zip` release asset (the `.app` holds only the desktop app) |
 
 ```sh
-# Windows, default install folder
-claude mcp add effectcraft -- "C:\Program Files\EffectCraft\effectcraft-cli.exe" mcp
+# Windows (PowerShell), default install folder
+claude mcp add effectcraft -- "$env:LOCALAPPDATA\Programs\ArtCraft\EffectCraft\effectcraft-cli.exe" mcp
 # Linux, or macOS with the CLI unzipped onto PATH
 claude mcp add effectcraft -- effectcraft-cli mcp
 ```
@@ -533,7 +533,10 @@ indices): character attributes
    starts editing (`position` instead of `box` makes point text; `vertical: true` vertical type).
 2. `text.insert {"text":"Hello world"}` types at the caret (replacing the selection);
    `text.setSelection {"start":6,"end":11}` selects "world"; `text.moveCaret {"to":"wordLeft",
-   "extend":true}` moves like the arrow keys; `text.delete {"word":true}` is Alt+Backspace.
+   "extend":true}` moves like the arrow keys; `text.delete {"word":true}` is Alt+Backspace;
+   `text.deleteSurrounding {"before":1,"after":2,"bytes":true}` deletes the characters around the
+   selection without deleting it (what an input method's replacement asks for: the selection stays
+   for the commit that follows; a byte count ending inside a character leaves that character).
 3. `layer.setText {"range":[6,11], "size":40, "fill":"#ff5500"}` styles the selection (the
    Character panel does the same); with an empty range it sets the style the next typed text takes.
 4. `edit.copy`, `edit.paste`, `edit.pasteTextMatchFormatting` and `edit.pasteTextFormattingOnly`
