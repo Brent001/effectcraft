@@ -166,8 +166,31 @@ fn project_files_name_their_version_and_always_read_back() {
     p.comp_mut(cid).unwrap().layers[0].props.prop_mut("transform/opacity").unwrap().value = Value::Scalar(f64::NAN);
     let e = p.to_file_json().unwrap_err().to_string();
     assert!(e.contains("can't be saved"), "{e}");
+    // Infinity too, in either profile: the check doesn't rely on reading the file back.
+    p.comp_mut(cid).unwrap().layers[0].props.prop_mut("transform/opacity").unwrap().value = Value::Scalar(f64::INFINITY);
+    let e = p.to_file_json().unwrap_err().to_string();
+    assert!(e.contains("can't be saved"), "{e}");
     assert!(crate::is_newer_version("0.2.0", "0.1.9") && crate::is_newer_version("1.0.0-rc.1", "0.9.9"));
     assert!(!crate::is_newer_version("0.1.1", "0.1.1") && !crate::is_newer_version("0.1.0", "0.1.1"));
+}
+
+#[test]
+fn project_files_refuse_newer_schemas() {
+    let p = Project { schema: crate::SCHEMA_VERSION + 1, ..Project::default() };
+    let expected = format!(
+        "the project can't be saved: it holds a value a project file can't store (project schema {} is newer than this version supports ({}))",
+        p.schema,
+        crate::SCHEMA_VERSION
+    );
+    assert_eq!(p.to_file_json().unwrap_err().to_string(), expected);
+    assert_eq!(p.to_file_json_with_view(&crate::SavedView::default()).unwrap_err().to_string(), expected);
+}
+
+#[test]
+fn saved_files_reopen_in_pretty_and_compact_form() {
+    let (p, _cid) = project_with_layer();
+    assert_eq!(Project::from_json(&p.to_file_json().unwrap()).unwrap(), p, "the pretty project file");
+    assert_eq!(Project::from_json(&p.to_json_compact()).unwrap(), p, "compact JSON");
 }
 
 #[test]
