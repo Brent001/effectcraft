@@ -40,7 +40,7 @@ foreach ($arch in $Architectures) {
   $msi = Join-Path $stage "$($policy.id)-NOT-INSTALLABLE.msi"
   $extensions = @($policy.extensions | ForEach-Object { '-ext'; "WixToolset.$_.wixext" })
   & wix build @sources -arch $arch @extensions `
-    -culture en-US -d 'Version=0.0.1' -d 'DisplayVersion=0.0.1-metadata-test' `
+    -culture en-US -d 'Version=0.0.1' -d 'DisplayVersion=0.0.1-metadata-test' -d 'IncludeDxc=0' `
     -d "BinDir=$stage" -d "IconPath=$(Join-Path $root $policy.icon)" `
     -d "DocsDir=$(Join-Path $stage 'docs')" -d "ModelsDir=$(Join-Path $stage 'models')" `
     -d "AppNoticesDir=$(Join-Path $stage 'notices')" -d 'HasCraftFontLicences=1' -d 'HasCli=1' `
