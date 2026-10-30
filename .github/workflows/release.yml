@@ -10,7 +10,7 @@ on:
       version:
         description: "Release version override"
         type: string
-        default: "0.17.0"
+        default: "0.18.0"
       has-macos:
         description: "Build macOS universal"
         type: boolean
