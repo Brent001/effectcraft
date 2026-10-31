@@ -7,9 +7,9 @@ use egui_kittest::Harness;
 use serde_json::json;
 
 fn settle(h: &mut Harness<'_, EffectcraftApp>) {
-    for _ in 0..600 {
+    for _ in 0..3000 {
         h.step();
-        if h.state().frames.inflight() == 0 && h.state().frames.last_ms.lock().map(|v| *v > 0.0).unwrap_or(false) {
+        if !h.state().gpu_initializing() && h.state().frames.inflight() == 0 && h.state().frames.last_ms.lock().map(|v| *v > 0.0).unwrap_or(false) {
             break;
         }
         std::thread::sleep(std::time::Duration::from_millis(20));
