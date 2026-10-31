@@ -861,7 +861,6 @@ impl GpuContext {
             uploads: Mutex::new(Uploads::default()),
             upload_budget: std::sync::atomic::AtomicUsize::new(budgets.upload),
             staging_budget: budgets.staging,
-            median_kernel,
             upload_full_warned: Default::default(),
             pool: Arc::new(Mutex::new(pool)),
             staging: Default::default(),
