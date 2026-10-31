@@ -6,10 +6,25 @@ use effectcraft_ui_egui::EffectcraftApp;
 use egui_kittest::Harness;
 use serde_json::json;
 
-fn settle(h: &mut Harness<'_, EffectcraftApp>) {
-    for _ in 0..600 {
+/// Wait until the background GPU compositor has attached (or reported why it cannot).
+/// The first UI pass starts initialization. Open a project only after this completes, otherwise
+/// the initial CPU frame can be mistaken for a GPU frame with the same cache key.
+fn wait_for_compositor(h: &mut Harness<'_, EffectcraftApp>) {
+    h.step();
+    for _ in 0..3000 {
+        if !h.state().gpu_initializing() {
+            break;
+        }
         h.step();
-        if h.state().frames.inflight() == 0 && h.state().frames.last_ms.lock().map(|v| *v > 0.0).unwrap_or(false) {
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    assert!(!h.state().gpu_initializing(), "GPU compositor initialization worker did not finish");
+}
+
+fn settle(h: &mut Harness<'_, EffectcraftApp>) {
+    for _ in 0..3000 {
+        h.step();
+        if !h.state().gpu_initializing() && h.state().frames.inflight() == 0 && h.state().frames.last_ms.lock().map(|v| *v > 0.0).unwrap_or(false) {
             break;
         }
         std::thread::sleep(std::time::Duration::from_millis(20));
@@ -50,21 +65,21 @@ fn viewer_draws_gpu_frames_that_match_the_cpu() {
     // egui-wgpu creates its GL device with WebGL2's limits, which the compositor declines.
     let gl = adapter.ends_with("(Gl)");
     drop(probe);
-    let mut s = Session::default();
-    s.execute("file.openDemoProject", json!({})).unwrap();
-    s.execute("time.set", json!({"time": 2.0})).unwrap();
     let mut h = Harness::builder()
         .with_size(egui::vec2(1400.0, 900.0))
         .with_pixels_per_point(1.0)
         .wgpu_setup(same_adapter(adapter))
-        .build_eframe(|_| EffectcraftApp::new(s));
-    settle(&mut h);
+        .build_eframe(|_| EffectcraftApp::new(Session::default()));
+    wait_for_compositor(&mut h);
     if gl && h.state().gpu_adapter().is_none() {
         eprintln!("egui-wgpu's GL device has WebGL2 limits: the viewer stays on the CPU, skipping");
         return;
     }
     assert!(h.state().gpu_adapter().is_some(), "GPU compositor on egui-wgpu's device");
     eprintln!("viewer compositor adapter: {:?}", h.state().gpu_adapter());
+    h.state_mut().session.execute("file.openDemoProject", json!({})).unwrap();
+    h.state_mut().session.execute("time.set", json!({"time": 2.0})).unwrap();
+    settle(&mut h);
     let gpu_px = h.state_mut().viewer_pixels().expect("read back the GPU frame");
     let gpu_shot = h.render().expect("render");
     // Mercury Software Only: the same frame from the CPU.

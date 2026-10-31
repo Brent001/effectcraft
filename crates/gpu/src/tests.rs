@@ -1167,7 +1167,7 @@ fn upload_budget_bounds_the_layer_textures_kept() {
         set(&mut l, "transform/position", v3(60.0 + 30.0 * i as f64, 40.0));
         // Adjustment layers: their footprints are cached layer buffers the GPU uploads.
         l.switches.adjustment = true;
-        s.effect(&mut l, "ec.color.levels", &[("gamma", n(1.1 + 0.2 * i as f64))]);
+        s.effect(&mut l, "ec.channel.invert", &[("blend", n(40.0 + 30.0 * i as f64))]);
         s.push(l);
     }
     let frame = |cache: &effectcraft_render::cache::LayerCache, k: u64| {

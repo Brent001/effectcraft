@@ -612,14 +612,6 @@ fn levels_ch(c: f32, ib: f32, iw: f32, g: f32, ob: f32, ow: f32) -> f32 {
     return ob + (ow - ob) * t;
 }
 
-fn exposure_ch(c: f32, gain: f32, offset: f32, gamma: f32, lin: bool) -> f32 {
-    if (lin) {
-        let x = c * gain + offset;
-        return sign(x) * powz(abs(x), 1.0 / gamma);
-    }
-    let x = srgb_to_linear(max(c, 0.0)) * gain + offset;
-    return sign(x) * linear_to_srgb(powz(abs(x), 1.0 / gamma));
-}
 
 // u[0].x = op:
 //  1 Tint            f[0] = black, f[1] = white, f[2].x = amount
@@ -736,12 +728,20 @@ fn pointwise(@builtin(global_invocation_id) gid: vec3<u32>) {
         case 5u: {
             if (a > 0.0) {
                 let c = straight(px);
-                // Per-channel gain, offset, gamma; negative values are mirrored.
-                let lin = P.u[0].y != 0u;
-                let o = vec3<f32>(
-                    exposure_ch(c.x, P.f[0].x, P.f[1].x, P.f[2].x, lin),
-                    exposure_ch(c.y, P.f[0].y, P.f[1].y, P.f[2].y, lin),
-                    exposure_ch(c.z, P.f[0].z, P.f[1].z, P.f[2].z, lin));
+                var o = vec3<f32>(0.0);
+                for (var i = 0; i < 3; i++) {
+                    // Per-channel gain, offset, gamma; negative values are mirrored. The
+                    // linear-light conversion is a pure 2.2 power: effects::EXPOSURE_LINEAR_GAMMA
+                    // (checked by the test shader_constants_match_the_cpu).
+                    if (P.u[0].y != 0u) {
+                        let x = c[i] * P.f[0][i] + P.f[1][i];
+                        o[i] = sign(x) * powz(abs(x), 1.0 / P.f[2][i]);
+                    } else {
+                        let lin = sign(c[i]) * powz(abs(c[i]), 2.2);
+                        let x = lin * P.f[0][i] + P.f[1][i];
+                        o[i] = sign(x) * powz(powz(abs(x), 1.0 / P.f[2][i]), 1.0 / 2.2);
+                    }
+                }
                 px = vec4<f32>(o * a, a);
             }
         }

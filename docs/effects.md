@@ -5,7 +5,7 @@
 
 EffectCraft ships 307 effects with 3032 parameters in total, grouped into the same categories as the Effects & Presets panel. Every effect is our own implementation, written from public behaviour descriptions and standard image-processing literature. Parameter names, order, popup options, units, defaults and ranges follow the reference application so that projects, expressions and muscle memory carry over.
 
-- **GPU**: 280 effects also run on the GPU compositor with identical results.
+- **GPU**: 262 effects also run on the GPU compositor with identical results.
 - **32**: 307 effects process 32-bit float (HDR, overbright) pixels without clamping.
 - **Status**: 307 implemented in full, 0 partial (what is missing is listed).
 
@@ -88,8 +88,8 @@ Effects are addressed by id (`ec.<category>.<name>`) or display name in commands
 | Auto Color | `ec.color.autocolor` | 6 | GPU | 32 | Implemented |
 | Auto Contrast | `ec.color.autocontrast` | 5 | GPU | 32 | Implemented |
 | Auto Levels | `ec.color.autolevels` | 5 | GPU | 32 | Implemented |
-| Black & White | `ec.color.blackwhite` | 8 | GPU | 32 | Implemented |
-| Brightness & Contrast | `ec.color.brightnesscontrast` | 3 | GPU | 32 | Implemented |
+| Black & White | `ec.color.blackwhite` | 8 |  | 32 | Implemented |
+| Brightness & Contrast | `ec.color.brightnesscontrast` | 3 |  | 32 | Implemented |
 | Broadcast Colors | `ec.color.broadcast` | 3 | GPU | 32 | Implemented |
 | CC Color Neutralizer | `ec.color.cccolorneutralizer` | 11 | GPU | 32 | Implemented |
 | CC Color Offset | `ec.color.cccoloroffset` | 4 | GPU | 32 | Implemented |
@@ -103,14 +103,14 @@ Effects are addressed by id (`ec.<category>.<name>`) or display name in commands
 | Color Link | `ec.color.colorlink` | 6 | GPU | 32 | Implemented |
 | Color Stabilizer | `ec.color.colorstabilizer` | 6 | GPU | 32 | Implemented |
 | Colorama | `ec.color.colorama` | 20 | GPU | 32 | Implemented |
-| Curves | `ec.color.curves` | 0 | GPU | 32 | Implemented |
+| Curves | `ec.color.curves` | 0 |  | 32 | Implemented |
 | Equalize | `ec.color.equalize` | 2 | GPU | 32 | Implemented |
-| Exposure | `ec.color.exposure` | 14 | GPU | 32 | Implemented |
+| Exposure | `ec.color.exposure` | 14 |  | 32 | Implemented |
 | Gamma/Pedestal/Gain | `ec.color.gammapedestalgain` | 10 | GPU | 32 | Implemented |
 | Hue/Saturation | `ec.color.huesaturation` | 50 | GPU | 32 | Implemented |
 | Leave Color | `ec.color.leavecolor` | 5 | GPU | 32 | Implemented |
-| Levels | `ec.color.levels` | 36 | GPU | 32 | Implemented |
-| Levels (Individual Controls) | `ec.color.levelsic` | 27 | GPU | 32 | Implemented |
+| Levels | `ec.color.levels` | 36 |  | 32 | Implemented |
+| Levels (Individual Controls) | `ec.color.levelsic` | 27 |  | 32 | Implemented |
 | Lumetri Color | `ec.color.lumetri` | 66 | GPU | 32 | Implemented |
 | OCIO CDL Transform | `ec.color.ociocdl` | 12 | GPU | 32 | Implemented |
 | OCIO Color Space Transform | `ec.color.ociocolorspace` | 7 | GPU | 32 | Implemented |
@@ -121,8 +121,8 @@ Effects are addressed by id (`ec.<category>.<name>`) or display name in commands
 | Photo Filter | `ec.color.photofilter` | 4 | GPU | 32 | Implemented |
 | Selective Color | `ec.color.selectivecolor` | 38 | GPU | 32 | Implemented |
 | Shadow/Highlight | `ec.color.shadowhighlight` | 14 | GPU | 32 | Implemented |
-| Tint | `ec.color.tint` | 3 | GPU | 32 | Implemented |
-| Tritone | `ec.color.tritone` | 4 | GPU | 32 | Implemented |
+| Tint | `ec.color.tint` | 3 |  | 32 | Implemented |
+| Tritone | `ec.color.tritone` | 4 |  | 32 | Implemented |
 | Vibrance | `ec.color.vibrance` | 2 | GPU | 32 | Implemented |
 | Video Limiter | `ec.color.videolimiter` | 5 | GPU | 32 | Implemented |
 
@@ -162,13 +162,13 @@ Effects are addressed by id (`ec.<category>.<name>`) or display name in commands
 | Rolling Shutter Repair | `ec.distort.rollingshutterrepair` | 5 |  | 32 | Implemented |
 | Smear | `ec.distort.smear` | 8 | GPU | 32 | Implemented |
 | Spherize | `ec.distort.spherize` | 2 | GPU | 32 | Implemented |
-| Transform | `ec.distort.transform` | 12 | GPU | 32 | Implemented |
+| Transform | `ec.distort.transform` | 12 |  | 32 | Implemented |
 | Turbulent Displace | `ec.distort.turbulentdisplace` | 11 | GPU | 32 | Implemented |
 | Twirl | `ec.distort.twirl` | 3 | GPU | 32 | Implemented |
 | Twirl (Legacy) | `ec.distort.twirllegacy` | 3 | GPU | 32 | Implemented |
 | Warp | `ec.distort.warp` | 5 | GPU | 32 | Implemented |
 | Warp Stabilizer | `ec.distort.warpstabilizer` | 20 |  | 32 | Implemented |
-| Wave Warp | `ec.distort.wavewarp` | 7 | GPU | 32 | Implemented |
+| Wave Warp | `ec.distort.wavewarp` | 7 |  | 32 | Implemented |
 
 ## Expression Controls
 
@@ -188,7 +188,7 @@ Effects are addressed by id (`ec.<category>.<name>`) or display name in commands
 
 | Effect | Id | Params | GPU | 32 | Status |
 |---|---|---:|:-:|:-:|---|
-| 4-Color Gradient | `ec.generate.fourcolor` | 12 | GPU | 32 | Implemented |
+| 4-Color Gradient | `ec.generate.fourcolor` | 12 |  | 32 | Implemented |
 | Advanced Lightning | `ec.generate.advancedlightning` | 24 | GPU | 32 | Implemented |
 | Audio Spectrum | `ec.generate.audiospectrum` | 23 | GPU | 32 | Implemented |
 | Audio Waveform | `ec.generate.audiowaveform` | 17 | GPU | 32 | Implemented |
@@ -203,7 +203,7 @@ Effects are addressed by id (`ec.<category>.<name>`) or display name in commands
 | Circle | `ec.generate.circle` | 11 | GPU | 32 | Implemented |
 | Ellipse | `ec.generate.ellipse` | 8 | GPU | 32 | Implemented |
 | Eyedropper Fill | `ec.generate.eyedropperfill` | 5 | GPU | 32 | Implemented |
-| Fill | `ec.generate.fill` | 7 | GPU | 32 | Implemented |
+| Fill | `ec.generate.fill` | 7 |  | 32 | Implemented |
 | Fractal | `ec.generate.fractal` | 21 |  | 32 | Implemented |
 | Gradient Ramp | `ec.generate.gradientramp` | 7 | GPU | 32 | Implemented |
 | Grid | `ec.generate.grid` | 12 | GPU | 32 | Implemented |
@@ -241,7 +241,7 @@ Effects are addressed by id (`ec.<category>.<name>`) or display name in commands
 | Color Difference Key | `ec.key.colordifference` | 16 | GPU | 32 | Implemented |
 | Color Range | `ec.key.colorrange` | 8 | GPU | 32 | Implemented |
 | Difference Matte | `ec.key.differencematte` | 6 | GPU | 32 | Implemented |
-| Extract | `ec.key.extract` | 6 | GPU | 32 | Implemented |
+| Extract | `ec.key.extract` | 6 |  | 32 | Implemented |
 | Inner/Outer Key | `ec.key.innerouter` | 88 | GPU | 32 | Implemented |
 | Key Cleaner | `ec.key.keycleaner` | 4 | GPU | 32 | Implemented |
 | Key Light | `ec.keying.keylight` | 56 | GPU | 32 | Implemented |
@@ -288,7 +288,7 @@ Effects are addressed by id (`ec.<category>.<name>`) or display name in commands
 | Color Key | `ec.key.colorkey` | 4 | GPU | 32 | Implemented |
 | Gaussian Blur (Legacy) | `ec.obsolete.gaussianlegacy` | 2 | GPU | 32 | Implemented |
 | Lightning | `ec.obsolete.lightning` | 25 | GPU | 32 | Implemented |
-| Luma Key | `ec.key.luma` | 5 | GPU | 32 | Implemented |
+| Luma Key | `ec.key.luma` | 5 |  | 32 | Implemented |
 | Path Text | `ec.obsolete.pathtext` | 32 | GPU | 32 | Implemented |
 | Reduce Interlace Flicker | `ec.blur.reduceflicker` | 1 | GPU | 32 | Implemented |
 | Spill Suppressor | `ec.key.spill` | 3 | GPU | 32 | Implemented |
@@ -357,7 +357,7 @@ Effects are addressed by id (`ec.<category>.<name>`) or display name in commands
 | Color Emboss | `ec.stylize.coloremboss` | 4 | GPU | 32 | Implemented |
 | Emboss | `ec.stylize.emboss` | 4 | GPU | 32 | Implemented |
 | Find Edges | `ec.stylize.findedges` | 2 | GPU | 32 | Implemented |
-| Glow | `ec.stylize.glow` | 14 | GPU | 32 | Implemented |
+| Glow | `ec.stylize.glow` | 14 |  | 32 | Implemented |
 | Mosaic | `ec.stylize.mosaic` | 3 | GPU | 32 | Implemented |
 | Motion Tile | `ec.stylize.motiontile` | 8 | GPU | 32 | Implemented |
 | Posterize | `ec.stylize.posterize` | 1 | GPU | 32 | Implemented |
@@ -385,7 +385,7 @@ Effects are addressed by id (`ec.<category>.<name>`) or display name in commands
 | Posterize Time | `ec.time.posterizetime` | 1 | GPU | 32 | Implemented |
 | Time Difference | `ec.time.timedifference` | 5 | GPU | 32 | Implemented |
 | Time Displacement | `ec.time.timedisplacement` | 4 | GPU | 32 | Implemented |
-| Timewarp | `ec.time.timewarp` | 28 | GPU | 32 | Implemented |
+| Timewarp | `ec.time.timewarp` | 28 |  | 32 | Implemented |
 
 ## Transition
 
@@ -406,8 +406,8 @@ Effects are addressed by id (`ec.<category>.<name>`) or display name in commands
 | Gradient Wipe | `ec.transition.gradientwipe` | 5 | GPU | 32 | Implemented |
 | Iris Wipe | `ec.transition.iriswipe` | 7 | GPU | 32 | Implemented |
 | Linear Wipe | `ec.transition.linearwipe` | 3 | GPU | 32 | Implemented |
-| Radial Wipe | `ec.transition.radialwipe` | 5 | GPU | 32 | Implemented |
-| Venetian Blinds | `ec.transition.venetian` | 4 | GPU | 32 | Implemented |
+| Radial Wipe | `ec.transition.radialwipe` | 5 |  | 32 | Implemented |
+| Venetian Blinds | `ec.transition.venetian` | 4 |  | 32 | Implemented |
 
 ## Utility
 

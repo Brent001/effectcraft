@@ -19,6 +19,18 @@ mod window;
 pub(crate) use screenshot::{MAX_PENDING_SHOTS, SCREENSHOT_SETTLE_PASSES, SCREENSHOT_SETTLE_S, SCREENSHOT_TIMEOUT_S};
 
 impl EffectcraftApp {
+    /// Whether the desktop GPU compositor is still initializing on its worker.
+    pub fn gpu_initializing(&self) -> bool {
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            self.gpu_init_rx.is_some()
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            false
+        }
+    }
+
     /// Build the app around `session`.
     /// Loads and applies the workspaces saved in the session's config directory (a failed load is reported in
     /// `ui.status`), initializes the default UI, playback and render state, and registers the frontend's commands as
