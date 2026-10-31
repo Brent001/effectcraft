@@ -1079,7 +1079,7 @@ impl GpuContext {
             return None;
         };
         cell.get_or_init(|| {
-            let built = self.family_module(*family).and_then(|module| build_pipeline(&self.device, module, &self.layout, *known_entry));
+            let built = self.family_module(*family).and_then(|module| build_pipeline(&self.device, module, &self.layout, known_entry));
             if let Err(why) = &built {
                 log::warn!("gpu {}: kernel {known_entry} unavailable, its effects render on the CPU: {why}", self.name);
             }
