@@ -38,8 +38,8 @@ fn adjustment_scene(depth: BitDepth, stack: &[(&str, Vec<(&str, Value)>)], maske
 fn gpu_stack() -> Vec<(&'static str, Vec<(&'static str, Value)>)> {
     vec![
         ("ec.blur.gaussian", vec![("blurriness", n(6.0))]),
-        ("ec.color.levels", vec![("inBlack", n(0.1)), ("gamma", n(1.4))]),
-        ("ec.color.tint", vec![("black", c(0.1, 0.0, 0.2)), ("amount", n(60.0))]),
+        ("ec.color.huesaturation", vec![("hue", n(18.0)), ("saturation", n(25.0))]),
+        ("ec.channel.invert", vec![("blend", n(60.0))]),
     ]
 }
 
