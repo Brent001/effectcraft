@@ -7,7 +7,7 @@ use effectcraft_project::{BitDepth, ColorSpace, MaskMode, MatteKind, TrackMatte}
 use effectcraft_render::{Backend, FxStep, FxTarget, RenderOpts, Renderer};
 use effectcraft_time::Tick;
 
-use crate::tests::{Pattern, Scene, c, check, compare_at, gpu, n, opts, set};
+use crate::tests::{Pattern, Scene, check, compare_at, gpu, n, opts, set};
 
 fn adjustment_scene(depth: BitDepth, stack: &[(&str, Vec<(&str, Value)>)], masked: bool) -> Scene {
     let mut s = Scene::new(depth);
